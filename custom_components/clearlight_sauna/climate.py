@@ -62,6 +62,10 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
     def hvac_action(self) -> HVACAction:
         s = self.state_data
         if s.heating:
+            coordinator = self.coordinator
+            if coordinator.upgrade_heater and not coordinator.heater_mode_lost:
+                # In heater mode AUX mirrors the heater relay (thermostat).
+                return HVACAction.HEATING if s.aux else HVACAction.IDLE
             return HVACAction.HEATING
         return HVACAction.IDLE if s.session_ended else HVACAction.OFF
 

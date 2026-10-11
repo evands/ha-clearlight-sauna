@@ -7,11 +7,17 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_HOST
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import CONF_DID, CONF_MAC, DOMAIN
+from .const import CONF_DID, CONF_MAC, CONF_UPGRADE_HEATER, DOMAIN
 from .protocol import (
     CLEARLIGHT_PRODUCT_KEY,
     ClearlightClient,
@@ -46,6 +52,11 @@ class ClearlightConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._discovered: dict[str, DiscoveredDevice] = {}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> ClearlightOptionsFlow:
+        return ClearlightOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
@@ -127,4 +138,17 @@ class ClearlightConfigFlow(ConfigFlow, domain=DOMAIN):
                 {vol.Required(CONF_HOST, default=entry.data[CONF_HOST]): str}
             ),
             errors=errors,
+        )
+
+
+class ClearlightOptionsFlow(OptionsFlowWithReload):
+    """Per-sauna options; the integration reloads when they change."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        schema = vol.Schema({vol.Required(CONF_UPGRADE_HEATER, default=False): bool})
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, self.config_entry.options),
         )

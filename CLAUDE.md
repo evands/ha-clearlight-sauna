@@ -36,16 +36,15 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 - **Toggling AUX from the app or over the network breaks heater mode** and reverts it to the timer-less manual mode until the keypad sequence is re-run (verified). The v0.2.0 AUX switch does exactly this.
 - **Activation is not visible in any datapoint.** Only the behavior shows it.
 
-## Planned v0.3.0 (designed, not built)
-- **Options flow:** "Upgrade heater activated" (default off).
+## Upgrade-heater option (v0.3.0)
+- **Options flow:** `upgrade_heater` (default off), handled by `OptionsFlowWithReload`.
 - **When on:**
-  - no writable AUX switch: remove the stale `switch` entity from the registry;
-  - a read-only `binary_sensor` "Heater relay" (bit 5);
-  - climate `hvac_action` = HEATING if bit 5, else IDLE while a session runs;
-  - **never write bit 5**;
-  - a Repairs issue (`heater_mode_lost`) if bit 5 is set while not heating (power off or 0:00) for more than about 10 s. Clear it when bit 5 is off while not heating.
-- **When off:** keep the AUX switch, with a README warning.
-- Bump to 0.3.0 and add tests for the options flow, entity swap, hvac_action and repair debounce.
+  - the AUX `switch` entity is removed from the registry, and nothing ever writes bit 5 (a test asserts this);
+  - a read-only `binary_sensor` "Heater relay" (bit 5) is added;
+  - climate `hvac_action` = HEATING or IDLE from bit 5 while a session runs.
+- **Mode-lost detection:** the coordinator raises a Repairs issue (`heater_mode_lost_<entry_id>`, severity error) after `HEATER_MODE_LOST_DELAY` (10 s) if bit 5 is set while not heating. It clears when bit 5 is off while not heating, and on unload.
+- **Limitation:** a mode lost with AUX *off* can't be distinguished from a satisfied thermostat, so it isn't flagged. That case is safe (the receptacle stays dead) but the heater won't run.
+- **When off:** the AUX switch stays and the binary_sensor is removed.
 
 ## Safety rules when touching real hardware
 - Use bounded, single-purpose commands. Restore state afterwards and report exactly what changed.

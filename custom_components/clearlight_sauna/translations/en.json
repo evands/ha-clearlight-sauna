@@ -64,6 +64,30 @@
       "aux": {
         "name": "AUX outlet"
       }
+    },
+    "binary_sensor": {
+      "heater_relay": {
+        "name": "Heater relay"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Clearlight sauna options",
+        "data": {
+          "upgrade_heater": "Upgrade heater activated"
+        },
+        "data_description": {
+          "upgrade_heater": "Turn on if you've run the keypad sequence for Clearlight's Full Spectrum Upgrade Heater. The AUX switch is replaced by a read-only heater relay sensor, because toggling AUX over the network takes the sauna out of heater mode."
+        }
+      }
+    }
+  },
+  "issues": {
+    "heater_mode_lost": {
+      "title": "{name}: upgrade heater mode is off",
+      "description": "The sauna's AUX output is on while the sauna isn't heating. That means the controller has left upgrade-heater mode, usually because AUX was toggled in the Clearlight app. The heater receptacle is no longer tied to the session timer or thermostat.\n\nTo fix it, at the keypad: turn the sauna on, switch the display to °C, set 60 °C, then hold AUX for 5 seconds until it beeps. Then turn the sauna off. This warning clears when the AUX output turns off together with the sauna."
     }
   }
 }

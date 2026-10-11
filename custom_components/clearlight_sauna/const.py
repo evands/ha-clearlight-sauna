@@ -8,6 +8,13 @@ DOMAIN = "clearlight_sauna"
 
 CONF_MAC = "mac"
 CONF_DID = "did"
+CONF_UPGRADE_HEATER = "upgrade_heater"
+
+# How long AUX may stay on while the sauna isn't heating before we decide the
+# controller has left upgrade-heater mode. In heater mode the AUX bit clears in
+# the same status update as power-off or timer expiry (verified), so this only
+# needs to absorb update jitter.
+HEATER_MODE_LOST_DELAY = 10  # seconds
 
 # Fallback poll in case push reports stop; the device normally pushes changes.
 WATCHDOG_INTERVAL = timedelta(seconds=60)

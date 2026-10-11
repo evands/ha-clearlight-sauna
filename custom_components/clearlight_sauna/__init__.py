@@ -14,7 +14,14 @@ from .protocol import ClearlightClient, GizwitsError, async_discover
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.CLIMATE, Platform.LIGHT, Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 
 async def _async_find_moved_device(hass: HomeAssistant, entry: ClearlightConfigEntry) -> str | None:
@@ -62,6 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClearlightConfigEntry) -
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(coordinator.async_shutdown_heater_watch)
+    coordinator.async_check_heater_mode()
     return True
 
 

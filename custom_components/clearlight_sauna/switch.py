@@ -1,4 +1,4 @@
-"""AUX outlet."""
+"""AUX outlet (only when the upgrade heater is not activated)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import ClearlightConfigEntry
-from .entity import ClearlightEntity
+from .entity import ClearlightEntity, async_remove_stale_entity
 from .protocol import DP_AUX
 
 PARALLEL_UPDATES = 1
@@ -20,14 +20,19 @@ async def async_setup_entry(
     entry: ClearlightConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    if entry.runtime_data.upgrade_heater:
+        # Writing AUX takes the controller out of upgrade-heater mode, so the
+        # integration must never offer it once the heater is activated.
+        async_remove_stale_entity(hass, entry, "switch", "aux")
+        return
     async_add_entities([ClearlightAux(entry.runtime_data, "aux")])
 
 
 class ClearlightAux(ClearlightEntity, SwitchEntity):
-    """The keypad's AUX button: switches the accessory outlet in the roof.
+    """The keypad's AUX button: switches the accessory outlet.
 
-    It works whether or not the sauna is heating, so treat whatever is
-    plugged into it as independently powered.
+    Without upgrade-heater activation this outlet has no timer: it works
+    whether or not the sauna is heating and survives power-off.
     """
 
     _attr_translation_key = "aux"

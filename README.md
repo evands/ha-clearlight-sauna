@@ -16,7 +16,8 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 | `number.clearlight_sauna_left_full_spectrum_heater` | Left full-spectrum heater intensity, 0–100 % |
 | `number.clearlight_sauna_right_full_spectrum_heater` | Right full-spectrum heater intensity, 0–100 % |
 | `number.clearlight_sauna_session_time` | Session length (5–60 min) when off; time remaining while heating |
-| `switch.clearlight_sauna_aux_outlet` | The keypad's AUX button: the accessory outlet |
+| `switch.clearlight_sauna_aux_outlet` | The keypad's AUX button (only when the upgrade-heater option is off) |
+| `binary_sensor.clearlight_sauna_heater_relay` | Read-only: heaters energized (only when the upgrade-heater option is on) |
 | `sensor.clearlight_sauna_cabin_temperature` | Cabin temperature, for history and automations |
 | `sensor.clearlight_sauna_time_remaining` | Minutes left in the session; 0 when off |
 
@@ -66,7 +67,13 @@ What the AUX output does depends on whether Clearlight's **Full Spectrum Upgrade
 - **Not activated (default):** AUX is a manual toggle with **no timer**. It can be on while the sauna is off, and it stays on through timer expiry and power-off. Don't plug anything that heats into it.
 - **Activated:** the upgrade heater plugs into the IEC C13 receptacle by the door. The one-time keypad sequence (power on → °C → 60 °C → hold AUX 5 s until it beeps) puts that output into heater mode. It then follows the sauna's heater relay: on while heating, off at power-off, at 0:00, and when the thermostat is satisfied.
 
-> ⚠️ **If you have the upgrade heater, don't use the AUX switch in this integration, or the AUX button in the Clearlight app.** Toggling AUX over the network takes the sauna out of heater mode and back to the timer-less behavior, until you re-run the keypad sequence. A future release will add an "upgrade heater" option that hides the switch and warns if heater mode is lost.
+> ⚠️ **Toggling AUX over the network, including with the Clearlight app's AUX button, takes the sauna out of heater mode** and back to the timer-less behavior, until you re-run the keypad sequence.
+
+**If you've activated the upgrade heater, turn on the integration's option:** **Settings → Devices & services → Clearlight Sauna → Configure → Upgrade heater activated.** With it on:
+
+- The AUX switch is removed, and the integration never writes AUX.
+- A read-only **Heater relay** sensor shows when the heaters are energized. The climate entity's `hvac_action` reports **heating** or **idle** from it, so you can see the thermostat cycling. Without the option, `hvac_action` only knows whether a session is running.
+- If AUX is ever on while the sauna isn't heating (for example, after someone presses AUX in the app), Home Assistant raises a **Repairs** issue telling you to re-run the keypad sequence. The issue clears on its own once AUX turns off together with the sauna.
 
 Clearlight's support pages describe pressing AUX three times on saunas with a built-in smoke detector to disable the detector for that session. It's unknown whether quick AUX toggles over the network do the same, so don't automate rapid toggling.
 
@@ -112,7 +119,7 @@ Each write sets only the targeted datapoint's flag. As a second layer, every oth
 
 The unexposed fields are in the diagnostics download. If you can work out what one of them does (for example by changing a setting in the app and comparing diagnostics), please open an issue.
 
-**Known quirk:** while the sauna is off, the controller occasionally reports the session length one minute short for about a second and then corrects it. It looks like the countdown timer ticking once and being reset.
+**Known quirk:** while the sauna is off, the controller sometimes reports the session length one minute short for about a second and then corrects it (10 → 9 → 10). It was seen three times with no power change, at intervals that are multiples of about 40 minutes, which makes keypad input unlikely. It looks like an internal timer tick that is immediately reset. The only visible effect is a one-second blip in the session-time history.
 
 ## Development
 
