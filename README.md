@@ -59,15 +59,14 @@ This integration can turn infrared heaters on when nobody is in the room, exactl
 
 Use automations that start the sauna with care, and consider a notification whenever heating starts.
 
-### The AUX outlet has no timer
+### AUX and the upgrade heater
 
-The AUX outlet is **not** tied to the session. Testing on hardware showed that it:
+What the AUX output does depends on whether Clearlight's **Full Spectrum Upgrade Heater** has been activated on the keypad. Both modes were verified on hardware.
 
-- can be switched on while the sauna is off;
-- stays on when the session timer runs out;
-- stays on when the sauna is powered off.
+- **Not activated (default):** AUX is a manual toggle with **no timer**. It can be on while the sauna is off, and it stays on through timer expiry and power-off. Don't plug anything that heats into it.
+- **Activated:** the upgrade heater plugs into the IEC C13 receptacle by the door. The one-time keypad sequence (power on → °C → 60 °C → hold AUX 5 s until it beeps) puts that output into heater mode. It then follows the sauna's heater relay: on while heating, off at power-off, at 0:00, and when the thermostat is satisfied.
 
-Anything plugged into AUX keeps running until AUX itself is switched off. That doesn't matter for a lamp. For anything that heats, add your own safeguard, such as an automation that turns AUX off when the climate entity stops heating, plus a hard time limit. Also check the outlet's current rating against the load.
+> ⚠️ **If you have the upgrade heater, don't use the AUX switch in this integration, or the AUX button in the Clearlight app.** Toggling AUX over the network takes the sauna out of heater mode and back to the timer-less behavior, until you re-run the keypad sequence. A future release will add an "upgrade heater" option that hides the switch and warns if heater mode is lost.
 
 Clearlight's support pages describe pressing AUX three times on saunas with a built-in smoke detector to disable the detector for that session. It's unknown whether quick AUX toggles over the network do the same, so don't automate rapid toggling.
 
