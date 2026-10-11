@@ -1,4 +1,4 @@
-"""Cabin temperature sensor (for history and automations)."""
+"""Cabin temperature and session time remaining."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -22,7 +22,13 @@ async def async_setup_entry(
     entry: ClearlightConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities([ClearlightCabinTemperature(entry.runtime_data, "cabin_temperature")])
+    coordinator = entry.runtime_data
+    async_add_entities(
+        [
+            ClearlightCabinTemperature(coordinator, "cabin_temperature"),
+            ClearlightTimeRemaining(coordinator, "time_remaining"),
+        ]
+    )
 
 
 class ClearlightCabinTemperature(ClearlightEntity, SensorEntity):
@@ -34,3 +40,20 @@ class ClearlightCabinTemperature(ClearlightEntity, SensorEntity):
     @property
     def native_value(self) -> int:
         return self.state_data.current_temp
+
+
+class ClearlightTimeRemaining(ClearlightEntity, SensorEntity):
+    """Minutes left in the running session; 0 when the sauna is off.
+
+    The controller counts the session-time datapoint down while heating.
+    """
+
+    _attr_translation_key = "time_remaining"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_icon = "mdi:timer-sand"
+
+    @property
+    def native_value(self) -> int:
+        s = self.state_data
+        return s.session_minutes if s.power else 0

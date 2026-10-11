@@ -4,16 +4,22 @@
       "user": {
         "title": "Clearlight sauna",
         "description": "Saunas found on your network.",
-        "data": { "host": "Sauna" }
+        "data": {
+          "host": "Sauna"
+        }
       },
       "manual": {
         "title": "Clearlight sauna",
         "description": "Enter the sauna's IP address. Give it a DHCP reservation on your router so it doesn't move.",
-        "data": { "host": "IP address" }
+        "data": {
+          "host": "IP address"
+        }
       },
       "reconfigure": {
         "title": "Change sauna address",
-        "data": { "host": "IP address" }
+        "data": {
+          "host": "IP address"
+        }
       }
     },
     "error": {
@@ -28,14 +34,36 @@
   },
   "entity": {
     "light": {
-      "inside_light": { "name": "Inside light" },
-      "outside_light": { "name": "Outside light" }
+      "inside_light": {
+        "name": "Inside light"
+      },
+      "outside_light": {
+        "name": "Outside light"
+      }
     },
     "number": {
-      "session_length": { "name": "Session length" }
+      "session_length": {
+        "name": "Session time"
+      },
+      "left_heater": {
+        "name": "Left full-spectrum heater"
+      },
+      "right_heater": {
+        "name": "Right full-spectrum heater"
+      }
     },
     "sensor": {
-      "cabin_temperature": { "name": "Cabin temperature" }
+      "cabin_temperature": {
+        "name": "Cabin temperature"
+      },
+      "time_remaining": {
+        "name": "Time remaining"
+      }
+    },
+    "switch": {
+      "aux": {
+        "name": "AUX outlet"
+      }
     }
   }
 }

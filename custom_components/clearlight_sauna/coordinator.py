@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, WATCHDOG_INTERVAL
-from .protocol import ClearlightClient, GizwitsError, SaunaState
+from .protocol import DP_POWER, ClearlightClient, GizwitsError, SaunaState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +58,25 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         if state is None:
             raise UpdateFailed("no status from sauna")
         return state
+
+    async def async_set_power(self, on: bool) -> None:
+        """Start or stop a session.
+
+        When a session times out, the controller keeps the power flag set
+        with 0 minutes left, so setting it again does nothing. Turning power
+        off resets the timer to the configured length (verified), after which
+        power on starts a fresh session.
+        """
+        state = self.client.state
+        if on and state is not None and state.session_ended:
+            await self.async_write({DP_POWER: 0})
+            try:
+                await self.client.async_request_status(wait=True)
+            except (GizwitsError, TimeoutError) as err:
+                raise HomeAssistantError(f"Sauna did not confirm power off: {err}") from err
+        if on and self.client.state is not None and self.client.state.heating:
+            return
+        await self.async_write({DP_POWER: int(on)})
 
     async def async_write(self, changes: dict[int, int]) -> None:
         """Send a write; surface failures to the caller of the service."""

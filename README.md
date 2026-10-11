@@ -13,11 +13,16 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 | `climate.clearlight_sauna` | Heat on/off, target temperature (70–175 °F), cabin temperature |
 | `light.clearlight_sauna_inside_light` | Cabin light |
 | `light.clearlight_sauna_outside_light` | Exterior and mood lights |
-| `number.clearlight_sauna_session_length` | Session length, 5–60 min |
+| `number.clearlight_sauna_left_full_spectrum_heater` | Left full-spectrum heater intensity, 0–100 % |
+| `number.clearlight_sauna_right_full_spectrum_heater` | Right full-spectrum heater intensity, 0–100 % |
+| `number.clearlight_sauna_session_time` | Session length (5–60 min) when off; time remaining while heating |
+| `switch.clearlight_sauna_aux_outlet` | The keypad's AUX button: the accessory outlet |
 | `sensor.clearlight_sauna_cabin_temperature` | Cabin temperature, for history and automations |
+| `sensor.clearlight_sauna_time_remaining` | Minutes left in the session; 0 when off |
 
 - **Push updates.** The sauna pushes every state change, including changes made at the keypad or in the app, so Home Assistant doesn't need to poll.
 - **Survives restarts and IP changes.** If the sauna is power-cycled, the integration reconnects. If DHCP gives the sauna a new address, the integration finds it again by MAC.
+- **Per-heater intensity.** The two full-spectrum heaters can be set independently, from 0 (off) to 100 %.
 - **Fahrenheit internally.** The controller always reports °F, even when its display is set to °C. Home Assistant converts to your unit system.
 
 ## Installation
@@ -54,6 +59,22 @@ This integration can turn infrared heaters on when nobody is in the room, exactl
 
 Use automations that start the sauna with care, and consider a notification whenever heating starts.
 
+### The AUX outlet has no timer
+
+The AUX outlet is **not** tied to the session. Testing on hardware showed that it:
+
+- can be switched on while the sauna is off;
+- stays on when the session timer runs out;
+- stays on when the sauna is powered off.
+
+Anything plugged into AUX keeps running until AUX itself is switched off. That doesn't matter for a lamp. For anything that heats, add your own safeguard, such as an automation that turns AUX off when the climate entity stops heating, plus a hard time limit. Also check the outlet's current rating against the load.
+
+Clearlight's support pages describe pressing AUX three times on saunas with a built-in smoke detector to disable the detector for that session. It's unknown whether quick AUX toggles over the network do the same, so don't automate rapid toggling.
+
+### When the timer runs out
+
+When the session timer reaches 0:00, the heaters stop, but the controller keeps its power flag set. The integration shows this as **Off**, with `hvac_action: idle` and `session_ended: true`. Turning the climate entity on from this state cycles power, so a fresh session starts. Powering off resets the timer to the configured length.
+
 ## Security
 
 The sauna's Wi-Fi module (Gizwits GAgent firmware) has no meaningful local authentication. It gives its login passcode to any client on the LAN that asks, and that is how this integration logs in. Anyone on your network can therefore control the sauna, and the device ID plus that passcode are also what Gizwits' cloud binding API asks for. Consider putting the sauna on an isolated IoT network or VLAN that Home Assistant can still reach.
@@ -78,11 +99,13 @@ Each write sets only the targeted datapoint's flag. As a second layer, every oth
 | 0 bit 2 | `PRE_TIME_FLAG` | Reservation active | not exposed |
 | 0 bit 3 | `power_flag` | Heat on/off | ✅ verified |
 | 0 bit 4 | `cf_flag` | Display unit (°C when set) | ✅ verified (values stay °F) |
-| 0 bit 5–6 | `UVB_FLAG`, `N_FLAG` | Unknown | not exposed |
+| 0 bit 5 | `UVB_FLAG` | AUX outlet (the name is left over from a UVB-lamp accessory) | ✅ verified |
+| 0 bit 6 | `N_FLAG` | Unknown | not exposed |
 | 1 | `LED` | Probably chromotherapy color | not exposed |
-| 2, 3 | `RIGHT`, `LEFT` | Probably full-spectrum heater intensity (both read 100) | not exposed |
+| 2 | `RIGHT` | Right full-spectrum heater intensity, 0–100 % | ✅ verified |
+| 3 | `LEFT` | Left full-spectrum heater intensity, 0–100 % | ✅ verified |
 | 4 | `SET_TEMP` | Target temperature, °F | ✅ verified |
-| 5, 6 | `SET_HOUR`, `SET_MINUTE` | Session length | ✅ verified |
+| 5, 6 | `SET_HOUR`, `SET_MINUTE` | Session length; counts down once a minute while heating | ✅ verified |
 | 7, 8 | `PRE_TIME_HOUR`, `PRE_TIME_MINUTE` | Reservation delay | not exposed |
 | 9 | `SN` | Unknown | not exposed |
 | 10 | `CURRENT_TEMP` | Cabin temperature, °F | ✅ verified |
@@ -90,7 +113,7 @@ Each write sets only the targeted datapoint's flag. As a second layer, every oth
 
 The unexposed fields are in the diagnostics download. If you can work out what one of them does (for example by changing a setting in the app and comparing diagnostics), please open an issue.
 
-**Known quirk:** the controller occasionally reports the session length one minute short for about a second and then corrects it. This happens with no client connected.
+**Known quirk:** while the sauna is off, the controller occasionally reports the session length one minute short for about a second and then corrects it. It looks like the countdown timer ticking once and being reset.
 
 ## Development
 

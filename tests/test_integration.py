@@ -23,8 +23,12 @@ pytestmark = pytest.mark.usefixtures("socket_enabled")
 CLIMATE = "climate.clearlight_sauna"
 INSIDE = "light.clearlight_sauna_inside_light"
 OUTSIDE = "light.clearlight_sauna_outside_light"
-SESSION = "number.clearlight_sauna_session_length"
+SESSION = "number.clearlight_sauna_session_time"
 CABIN = "sensor.clearlight_sauna_cabin_temperature"
+REMAINING = "sensor.clearlight_sauna_time_remaining"
+AUX = "switch.clearlight_sauna_aux_outlet"
+LEFT = "number.clearlight_sauna_left_full_spectrum_heater"
+RIGHT = "number.clearlight_sauna_right_full_spectrum_heater"
 
 
 async def _setup(hass: HomeAssistant) -> MockConfigEntry:
@@ -143,3 +147,83 @@ async def test_unavailable_on_disconnect_and_recovers(
             break
     assert hass.states.get(INSIDE).state == STATE_OFF
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_aux_and_heater_intensity(
+    hass: HomeAssistant, patch_client, fake_device: FakeGAgent
+) -> None:
+    await _setup(hass)
+    assert hass.states.get(AUX).state == STATE_OFF
+    assert float(hass.states.get(LEFT).state) == 100
+    assert float(hass.states.get(RIGHT).state) == 100
+    assert float(hass.states.get(REMAINING).state) == 0  # off
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": AUX}, blocking=True)
+    await hass.async_block_till_done()
+    assert fake_device.status[0] & 0x20
+    assert not fake_device.status[0] & 0x08  # AUX never touches heat
+    assert hass.states.get(AUX).state == STATE_ON
+
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": LEFT, "value": 55}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert (fake_device.status[2], fake_device.status[3]) == (100, 55)  # RIGHT, LEFT
+    assert float(hass.states.get(LEFT).state) == 55
+    assert float(hass.states.get(RIGHT).state) == 100
+
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": RIGHT, "value": 0}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert (fake_device.status[2], fake_device.status[3]) == (0, 55)
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": AUX}, blocking=True)
+    await hass.async_block_till_done()
+    assert not fake_device.status[0] & 0x20
+
+
+async def test_time_remaining_tracks_countdown(
+    hass: HomeAssistant, patch_client, fake_device: FakeGAgent
+) -> None:
+    await _setup(hass)
+    await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
+    await hass.async_block_till_done()
+    assert float(hass.states.get(REMAINING).state) == 10
+
+    # The controller decrements the session minutes while heating.
+    fake_device.status[6] = 7
+    await hass.config_entries.async_entries(DOMAIN)[0].runtime_data.client.async_request_status(wait=True)
+    await hass.async_block_till_done()
+    assert float(hass.states.get(REMAINING).state) == 7
+    assert float(hass.states.get(SESSION).state) == 7
+
+
+async def test_turn_on_after_session_timed_out(
+    hass: HomeAssistant, patch_client, fake_device: FakeGAgent
+) -> None:
+    """At 0:00 the power flag stays set; turning on must cycle power to restart."""
+    await _setup(hass)
+    client = hass.config_entries.async_entries(DOMAIN)[0].runtime_data.client
+    fake_device.status[0] |= 0x08  # power flag on
+    fake_device.status[6] = 0  # timer ran out
+    await client.async_request_status(wait=True)
+    await hass.async_block_till_done()
+    climate = hass.states.get(CLIMATE)
+    assert climate.state == HVACMode.OFF
+    assert climate.attributes["hvac_action"] == "idle"
+    assert climate.attributes["session_ended"] is True
+    assert float(hass.states.get(REMAINING).state) == 0
+
+    fake_device.writes.clear()
+    await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
+    await hass.async_block_till_done()
+    power_writes = [w[3] & 0x08 for w in fake_device.writes if int.from_bytes(w[1:3], "big") >> 3 & 1]
+    assert power_writes == [0, 0x08]  # off, then on
+    assert fake_device.status[0] & 0x08 and fake_device.status[6] == 10
+    assert hass.states.get(CLIMATE).state == HVACMode.HEAT
+
+    # Turning on while already heating sends nothing.
+    fake_device.writes.clear()
+    await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
+    assert fake_device.writes == []

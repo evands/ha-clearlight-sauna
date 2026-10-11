@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import MAX_TEMP_F, MIN_TEMP_F
 from .coordinator import ClearlightConfigEntry
 from .entity import ClearlightEntity
-from .protocol import DP_POWER, DP_SET_TEMP
+from .protocol import DP_SET_TEMP
 
 PARALLEL_UPDATES = 1
 
@@ -56,18 +56,22 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
 
     @property
     def hvac_mode(self) -> HVACMode:
-        return HVACMode.HEAT if self.state_data.power else HVACMode.OFF
+        return HVACMode.HEAT if self.state_data.heating else HVACMode.OFF
 
     @property
     def hvac_action(self) -> HVACAction:
-        return HVACAction.HEATING if self.state_data.power else HVACAction.OFF
+        s = self.state_data
+        if s.heating:
+            return HVACAction.HEATING
+        return HVACAction.IDLE if s.session_ended else HVACAction.OFF
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"session_minutes": self.state_data.session_minutes}
+        s = self.state_data
+        return {"session_minutes": s.session_minutes, "session_ended": s.session_ended}
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        await self.coordinator.async_write({DP_POWER: int(hvac_mode == HVACMode.HEAT)})
+        await self.coordinator.async_set_power(hvac_mode == HVACMode.HEAT)
 
     async def async_turn_on(self) -> None:
         await self.async_set_hvac_mode(HVACMode.HEAT)
@@ -80,7 +84,7 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
         if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
             temp = max(self.min_temp, min(self.max_temp, round(temp)))
             changes[DP_SET_TEMP] = int(temp)
-        if (mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
-            changes[DP_POWER] = int(mode == HVACMode.HEAT)
         if changes:
             await self.coordinator.async_write(changes)
+        if (mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            await self.async_set_hvac_mode(mode)

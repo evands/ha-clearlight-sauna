@@ -62,6 +62,7 @@ DP_PRE_TIME_FLAG = 2
 DP_POWER = 3
 DP_CF = 4
 DP_UVB = 5
+DP_AUX = DP_UVB  # named UVB_FLAG in the Gizwits definition; drives the AUX outlet
 DP_N = 6
 DP_LED = 7
 DP_RIGHT = 8
@@ -183,14 +184,14 @@ class SaunaState:
     reservation_active: bool
     power: bool
     celsius: bool  # cf_flag (display unit); reported values stay °F either way
-    uvb: bool  # (?)
+    aux: bool  # UVB_FLAG: AUX outlet; independent of power (verified)
     n_flag: bool  # (?)
     led: int  # (?) chromotherapy color
-    right: int  # (?) observed 100; likely full-spectrum intensity
-    left: int  # (?)
+    right: int  # right full-spectrum heater intensity, 0-100 % (verified)
+    left: int  # left full-spectrum heater intensity, 0-100 % (verified)
     set_temp: int
     set_hour: int
-    set_minute: int
+    set_minute: int  # session length when off; counts down while running
     pre_time_hour: int
     pre_time_minute: int
     sn: int
@@ -200,6 +201,16 @@ class SaunaState:
     @property
     def session_minutes(self) -> int:
         return self.set_hour * 60 + self.set_minute
+
+    @property
+    def heating(self) -> bool:
+        """A session is running (power on and time left)."""
+        return self.power and self.session_minutes > 0
+
+    @property
+    def session_ended(self) -> bool:
+        """Timer ran out: heaters stop but the power flag stays set (verified)."""
+        return self.power and self.session_minutes == 0
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "SaunaState":
@@ -218,7 +229,7 @@ class SaunaState:
             reservation_active=bit(DP_PRE_TIME_FLAG),
             power=bit(DP_POWER),
             celsius=bit(DP_CF),
-            uvb=bit(DP_UVB),
+            aux=bit(DP_AUX),
             n_flag=bit(DP_N),
             led=data[1],
             right=data[2],

@@ -53,6 +53,8 @@ def test_decode_captured_status() -> None:
     assert s.current_temp == 76
     assert (s.right, s.left) == (100, 100)
     assert s.session_minutes == 10
+    assert not s.aux
+    assert p.SaunaState.from_bytes(bytes([0x28]) + INITIAL_STATUS[1:]).aux
 
 
 def test_write_payload_flags_and_padding() -> None:

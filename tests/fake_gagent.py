@@ -40,6 +40,7 @@ DISCOVERY_REPLY = (
 class FakeGAgent:
     def __init__(self, ack_writes: bool = True) -> None:
         self.status = bytearray(INITIAL_STATUS)
+        self.session_length = INITIAL_STATUS[6]
         self.writes: list[bytes] = []
         self.logged_in = False
         self.ack_writes = ack_writes
@@ -74,6 +75,9 @@ class FakeGAgent:
         for dp, off in p.UINT8_BYTES.items():
             if flags >> dp & 1:
                 self.status[off] = vals[off]
+        if flags >> p.DP_POWER & 1 and not vals[0] & 0x08:
+            # Real controller: power off resets the timer to the configured length.
+            self.status[5], self.status[6] = 0, self.session_length
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         self.clients.append(writer)
