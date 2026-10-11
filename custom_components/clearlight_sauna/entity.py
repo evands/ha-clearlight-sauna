@@ -44,7 +44,7 @@ class ClearlightEntity(CoordinatorEntity[ClearlightCoordinator]):
             identifiers={(DOMAIN, device_id)},
             connections=connections,
             manufacturer="Clearlight",
-            model="Sanctuary (Gizwits Wi-Fi)",
+            model="Sanctuary",
             name=entry.title,
             sw_version=info.wifi_sw if info else None,
             hw_version=info.wifi_hw if info else None,
