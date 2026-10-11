@@ -119,7 +119,7 @@ Each write sets only the targeted datapoint's flag. As a second layer, every oth
 
 The unexposed fields are in the diagnostics download. If you can work out what one of them does (for example by changing a setting in the app and comparing diagnostics), please open an issue.
 
-**Known quirk:** while the sauna is off, the controller sometimes reports the session length one minute short for about a second and then corrects it (10 → 9 → 10). It was seen three times with no power change, at intervals that are multiples of about 40 minutes, which makes keypad input unlikely. It looks like an internal timer tick that is immediately reset. The only visible effect is a one-second blip in the session-time history.
+**Known quirk:** while the sauna is off, the controller sometimes reports the session length one minute short for about a second and then corrects it (10 → 9 → 10). It was seen three times with no power change and no keypad input, at intervals that are multiples of about 40 minutes. It appears to be an internal timer tick that is immediately reset. The only visible effect is a one-second blip in the session-time history.
 
 ## Development
 
