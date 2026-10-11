@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Clearlight sauna",
+        "description": "Saunas found on your network.",
+        "data": { "host": "Sauna" }
+      },
+      "manual": {
+        "title": "Clearlight sauna",
+        "description": "Enter the sauna's IP address. Give it a DHCP reservation on your router so it doesn't move.",
+        "data": { "host": "IP address" }
+      },
+      "reconfigure": {
+        "title": "Change sauna address",
+        "data": { "host": "IP address" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the sauna on TCP port 12416.",
+      "invalid_auth": "The sauna's Wi-Fi module refused the login.",
+      "not_clearlight": "That device is a Gizwits module, but not a Clearlight sauna."
+    },
+    "abort": {
+      "already_configured": "This sauna is already set up.",
+      "reconfigure_successful": "Address updated."
+    }
+  },
+  "entity": {
+    "light": {
+      "inside_light": { "name": "Inside light" },
+      "outside_light": { "name": "Outside light" }
+    },
+    "number": {
+      "session_length": { "name": "Session length" }
+    },
+    "sensor": {
+      "cabin_temperature": { "name": "Cabin temperature" }
+    }
+  }
+}

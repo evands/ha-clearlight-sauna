@@ -1,0 +1,12 @@
+{
+  "domain": "clearlight_sauna",
+  "name": "Clearlight Sauna",
+  "codeowners": ["@evands"],
+  "config_flow": true,
+  "documentation": "https://github.com/evands/ha-clearlight-sauna",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/evands/ha-clearlight-sauna/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
