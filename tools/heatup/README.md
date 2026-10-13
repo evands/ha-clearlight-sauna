@@ -44,6 +44,7 @@ Both scripts use the standard library only (Python 3.9+). The export is long-for
 |---|---|
 | `data/2026-10-12-max.csv` | Max run, 76 °F start, 175 °F target, 60 min, both heaters 100 %, door closed, nobody inside. Raw history from HA (de-dither filter not yet installed). |
 | `data/2026-10-13-140.csv` | Normal run, 76 °F start, 140 °F target, 60 min, door closed, nobody inside; includes 2.5 h of cool-down. Raw history. |
+| `data/2026-10-13-175.csv` | Repeat of the max run: 77 °F start (cabin at room temperature for 5+ h), 175 °F target, 60 min, door closed, nobody inside. A 2 s connection drop at 57 min. Raw history. |
 
 ## Findings so far
 
@@ -58,3 +59,16 @@ After the timer ended it cooled at about 2 °F/min (local time constant about 28
 **2026-10-13 140 °F run.** This one was a clean single exponential: `tau` 26 min, `T_inf` 152 °F, RMSE 1.0 °F, and the fit's own ETAs land within 1-3 min. Smoothed, it reached 100 °F at 10 min, 120 °F at 22 min, 130 °F at 33 min and 140 °F at 46 min. There was no dip and no knee, so the 2026-10-12 dip looks like a one-off; that run was also faster below 120 °F (18 vs 22 min) and slower above it (140 °F at 51 vs 46 min), which a single time constant can't reproduce.
 
 At target the controller held 138-140 °F by dropping the heaters for about 89 s at a time (three times in the last 14 min). Cool-down was fast at first (139 to 107 °F in 22 min), then slow: still 82 °F 2.4 h after the timer ended, falling about 0.1 °F/min (local time constant about 80 min). Allow 3-4 h between cold-start runs.
+
+**2026-10-13 175 °F run.** It peaked at 150 °F as the timer ended (146 °F on 2026-10-12) and fit a single exponential well: `tau` 31.8 min, `T_inf` 162 °F (85 °F above ambient), RMSE 1.1 °F. Below 140 °F it tracked the morning's 140 °F run within a minute or two: 100 °F at 9 min, 120 °F at 22 min, 130 °F at 32 min, 140 °F at 43 min.
+
+**Where this leaves the ETA.** One time constant is enough after all: with this run's numbers (`tau` 32 min, `T_inf` = ambient + 85 °F) the predicted times to 100, 120, 130 and 140 °F match the 140 °F run within about a minute. The 2026-10-12 run is the outlier (up to 6 min off, with its fast start, knee and dip); more normal runs will show how often that happens.
+
+| Run | 100 °F | 120 °F | 130 °F | 140 °F |
+|---|---|---|---|---|
+| Model (`tau` 32 min, ambient + 85 °F) | 10.6 | 23.3 | 32.2 | 44.6 |
+| 2026-10-13 140 °F | 9.5 | 22.2 | 32.7 | 45.8 |
+| 2026-10-13 175 °F | 9.3 | 21.7 | 31.5 | 43.2 |
+| 2026-10-12 max | 7.9 | 18.2 | 36.5 | 50.8 |
+
+Minutes from heaters on, smoothed; model shown for a 76 °F start.
