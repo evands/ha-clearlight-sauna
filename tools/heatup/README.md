@@ -43,6 +43,7 @@ Both scripts use the standard library only (Python 3.9+). The export is long-for
 | File | Run |
 |---|---|
 | `data/2026-10-12-max.csv` | Max run, 76 °F start, 175 °F target, 60 min, both heaters 100 %, door closed, nobody inside. Raw history from HA (de-dither filter not yet installed). |
+| `data/2026-10-13-140.csv` | Normal run, 76 °F start, 140 °F target, 60 min, door closed, nobody inside; includes 2.5 h of cool-down. Raw history. |
 
 ## Findings so far
 
@@ -53,3 +54,7 @@ The heat-up is **not** a single first-order curve. It rises fast to about 120 °
 Next: normal cold-start runs will show whether the knee near 120 °F and the dip near 27 min repeat. If they do, an ETA built on the measured curve (time from heaters-on to each temperature, shifted for ambient) will beat any single time constant.
 
 After the timer ended it cooled at about 2 °F/min (local time constant about 28 min, which will lengthen as the walls give up their heat).
+
+**2026-10-13 140 °F run.** This one was a clean single exponential: `tau` 26 min, `T_inf` 152 °F, RMSE 1.0 °F, and the fit's own ETAs land within 1-3 min. Smoothed, it reached 100 °F at 10 min, 120 °F at 22 min, 130 °F at 33 min and 140 °F at 46 min. There was no dip and no knee, so the 2026-10-12 dip looks like a one-off; that run was also faster below 120 °F (18 vs 22 min) and slower above it (140 °F at 51 vs 46 min), which a single time constant can't reproduce.
+
+At target the controller held 138-140 °F by dropping the heaters for about 89 s at a time (three times in the last 14 min). Cool-down was fast at first (139 to 107 °F in 22 min), then slow: still 82 °F 2.4 h after the timer ended, falling about 0.1 °F/min (local time constant about 80 min). Allow 3-4 h between cold-start runs.
