@@ -152,8 +152,15 @@ def main(paths: list[str]) -> int:
         lo, hi = m["t_inf_range"]
         print(f"  T_inf within 25% of best SSE: {lo:.0f}-{hi:.0f} F"
               + ("  <- poorly identified" if hi - lo > 20 else ""))
+        reached = []
+        for target in range(int(m["ambient"]) // 10 * 10 + 10, int(m["peak"][1]) + 1, 10):
+            t = next((t for t, T in m["ramp"] if T >= target), None)
+            if t is not None:
+                reached.append(f"{target} F {t / 60:.0f} min")
+        print("  Reached (smoothed, from heaters on): " + ", ".join(reached))
         print("  ETA check (model vs this run's own smoothed curve):")
-        for frm, to in ((m["ambient"] + 4, 100), (m["ambient"] + 4, 120), (100, 120)):
+        start = m["ambient"] + 4
+        for frm, to in ((start, 100), (start, 120), (start, 140), (100, 120), (120, 140)):
             actual_from = next((t for t, T in m["ramp"] if T >= frm), None)
             actual_to = next((t for t, T in m["ramp"] if T >= to), None)
             if actual_from is None or actual_to is None:

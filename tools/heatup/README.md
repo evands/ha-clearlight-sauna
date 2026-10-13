@@ -42,4 +42,14 @@ Both scripts use the standard library only (Python 3.9+). The export is long-for
 
 | File | Run |
 |---|---|
-| `data/2026-10-12-max.csv` | Max run, 76 °F start, 175 °F target, 60 min, both heaters 100 % |
+| `data/2026-10-12-max.csv` | Max run, 76 °F start, 175 °F target, 60 min, both heaters 100 %, door closed, nobody inside. Raw history from HA (de-dither filter not yet installed). |
+
+## Findings so far
+
+**2026-10-12 max run.** The cabin never got near 175 °F: it was still climbing slowly (about 0.6 °F/min) at 146 °F when the 60 min timer ended. Smoothed, it reached 100 °F at 8 min, 120 °F at 18 min, 130 °F at 36 min and 140 °F at 51 min.
+
+The heat-up is **not** a single first-order curve. It rises fast to about 120 °F (3-4 °F/min at first, then about 2), then slows abruptly to under 1 °F/min. Around 26 min (127 °F) it fell back 2-4 °F for a few minutes before resuming; the heater relay stayed on throughout, so the cause isn't visible in the data. The best single-exponential fit (`tau` 23.5 min, `T_inf` 148 °F, RMSE 2.5 °F, negative dead time) runs about 25 % slow below 120 °F, so ETAs from it would be off by several minutes.
+
+Next: normal cold-start runs will show whether the knee near 120 °F and the dip near 27 min repeat. If they do, an ETA built on the measured curve (time from heaters-on to each temperature, shifted for ambient) will beat any single time constant.
+
+After the timer ended it cooled at about 2 °F/min (local time constant about 28 min, which will lengthen as the walls give up their heat).
