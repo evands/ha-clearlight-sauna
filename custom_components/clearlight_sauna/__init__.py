@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClearlightConfigEntry) -
         except (GizwitsError, TimeoutError) as err:
             await client.disconnect()
             raise ConfigEntryNotReady(f"Sauna did not report status: {err}") from err
-    coordinator.async_set_updated_data(client.state)
+    coordinator.async_set_state(client.state)
     client.start()  # keeps the connection alive and reconnects with backoff
     entry.runtime_data = coordinator
 

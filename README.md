@@ -96,6 +96,8 @@ The Wi-Fi board is an ESP8266 running Gizwits GAgent 4.1.2 with a separate contr
 
 Each write sets only the targeted datapoint's flag. As a second layer, every other field in the write is copied from the sauna's current state, so a write can never touch an unrelated setting.
 
+The controller reports cabin temperature in whole °F, and near a half-degree boundary the reading flips between the two neighbours every few seconds. The integration filters this: a 1 °F step in the direction the cabin is heading (up during a session, down after) shows immediately, while a step back has to hold for 3 minutes first. Heat-up and cool-down track with no lag, and an idle sauna no longer writes a state change every few seconds.
+
 ### Datapoints
 
 | Byte | Field | Meaning | Status |

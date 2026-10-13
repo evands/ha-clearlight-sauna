@@ -48,7 +48,8 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
 
     @property
     def current_temperature(self) -> float:
-        return self.state_data.current_temp
+        temp = self.coordinator.cabin_temp  # de-dithered, as the sensor shows
+        return self.state_data.current_temp if temp is None else temp
 
     @property
     def target_temperature(self) -> float:

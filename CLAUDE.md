@@ -29,6 +29,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
   - byte10: cabin temp (°F)
   - byte11: `heart_pulse` (always 0)
 - **Quirk (confirmed):** while off, the controller emits SET_MINUTE 10 -> 9 -> 10 within about 1 s, roughly every 40 min, with no keypad input. It's harmless; nothing filters it.
+- **Cabin temperature dither (observed 2026-10-11/12):** byte10 flips between neighbouring values (e.g. 75/76) every ~2 s to ~2 min when the true temperature sits near a boundary, ~1,500 HA state changes a day while idle. Since v0.3.2 the coordinator runs it through `temperature.CabinTempFilter` (direction-of-travel hysteresis: steps with the trend pass at once, reversals must persist 180 s, jumps of 2+ pass at once; trend set +1 at session start, -1 at stop). Entities read `coordinator.cabin_temp`; `SaunaState.current_temp` stays raw.
 - **Timer at 0:00:** the heaters stop but the **power bit stays set**. Turning power off resets the timer to the configured length. v0.2.0 handles this: the climate entity shows off/idle with `session_ended`, and `turn_on` cycles power.
 
 ### AUX / upgrade heater (critical)

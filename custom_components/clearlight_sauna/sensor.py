@@ -39,7 +39,9 @@ class ClearlightCabinTemperature(ClearlightEntity, SensorEntity):
 
     @property
     def native_value(self) -> int:
-        return self.state_data.current_temp
+        # De-dithered; the raw reading can flip between neighbours every few seconds.
+        temp = self.coordinator.cabin_temp
+        return self.state_data.current_temp if temp is None else temp
 
 
 class ClearlightTimeRemaining(ClearlightEntity, SensorEntity):

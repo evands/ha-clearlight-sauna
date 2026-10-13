@@ -12,13 +12,20 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_UPGRADE_HEATER, DOMAIN, HEATER_MODE_LOST_DELAY, WATCHDOG_INTERVAL
 from .protocol import DP_POWER, ClearlightClient, GizwitsError, SaunaState
+from .temperature import CabinTempFilter
 
 _LOGGER = logging.getLogger(__name__)
 
 type ClearlightConfigEntry = ConfigEntry[ClearlightCoordinator]
+
+
+def _now() -> float:
+    """Seconds on HA's clock (frozen and advanced together with timers in tests)."""
+    return dt_util.utcnow().timestamp()
 
 
 class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
@@ -40,6 +47,12 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         self.client = client
         self.heater_mode_lost = False
         self._lost_timer: Callable[[], None] | None = None
+        # The controller's whole-degree reading dithers at a boundary; entities
+        # show the filtered value (see temperature.py).
+        self._temp_filter = CabinTempFilter()
+        self._temp_timer: Callable[[], None] | None = None
+        self._was_heating: bool | None = None
+        self.cabin_temp: int | None = None
         client.set_callbacks(self._handle_state, self._handle_connection)
 
     @property
@@ -53,8 +66,51 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
 
     @callback
     def _handle_state(self, state: SaunaState) -> None:
+        self.async_set_state(state)
+
+    @callback
+    def async_set_state(self, state: SaunaState) -> None:
+        """Publish a new device state (push, or the first status at setup)."""
+        self._filter_cabin_temp(state)
         self.async_set_updated_data(state)
         self.async_check_heater_mode(state)
+
+    @callback
+    def _filter_cabin_temp(self, state: SaunaState) -> bool:
+        """Run the raw cabin reading through the de-dither filter.
+
+        Returns True when the value entities show has changed.
+        """
+        if state.heating != self._was_heating:
+            # Heating starts: the cabin will rise. Stops: it will fall.
+            self._temp_filter.set_trend(1 if state.heating else -1)
+            self._was_heating = state.heating
+        before = self.cabin_temp
+        self.cabin_temp = self._temp_filter.update(state.current_temp, _now())
+        self._schedule_temp_recheck()
+        return self.cabin_temp != before
+
+    @callback
+    def _schedule_temp_recheck(self) -> None:
+        """A held reversal is accepted on time even if the device sends nothing new."""
+        self._cancel_temp_timer()
+        deadline = self._temp_filter.pending_deadline
+        if deadline is not None:
+            delay = max(0.0, deadline - _now()) + 0.05
+            self._temp_timer = async_call_later(self.hass, delay, self._async_temp_recheck)
+
+    @callback
+    def _async_temp_recheck(self, _fired: datetime) -> None:
+        self._temp_timer = None
+        state = self.client.state or self.data
+        if state is not None and self._filter_cabin_temp(state):
+            self.async_update_listeners()
+
+    @callback
+    def _cancel_temp_timer(self) -> None:
+        if self._temp_timer is not None:
+            self._temp_timer()
+            self._temp_timer = None
 
     @callback
     def async_check_heater_mode(self, state: SaunaState | None = None) -> None:
@@ -117,6 +173,7 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
     @callback
     def async_shutdown_heater_watch(self) -> None:
         self._cancel_lost_timer()
+        self._cancel_temp_timer()
         ir.async_delete_issue(self.hass, DOMAIN, self.heater_mode_issue_id)
 
     @callback
@@ -136,6 +193,7 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
             raise UpdateFailed(f"status request failed: {err}") from err
         if state is None:
             raise UpdateFailed("no status from sauna")
+        self._filter_cabin_temp(state)
         return state
 
     async def async_set_power(self, on: bool) -> None:

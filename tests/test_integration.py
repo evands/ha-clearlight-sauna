@@ -8,12 +8,20 @@ pytest.importorskip("pytest_homeassistant_custom_component")
 
 from homeassistant import config_entries
 from homeassistant.components.climate import HVACMode
-from homeassistant.const import CONF_HOST, STATE_OFF, STATE_ON, STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    CONF_HOST,
+    EVENT_STATE_CHANGED,
+    STATE_OFF,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+)
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResultType
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.clearlight_sauna.const import CONF_MAC, DOMAIN
+from custom_components.clearlight_sauna.temperature import REVERSAL_HOLD
 
 from .fake_gagent import FAKE_MAC, FakeGAgent
 
@@ -227,3 +235,51 @@ async def test_turn_on_after_session_timed_out(
     fake_device.writes.clear()
     await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
     assert fake_device.writes == []
+
+
+async def test_cabin_temperature_dither_is_filtered(
+    hass: HomeAssistant, patch_client, fake_device: FakeGAgent, freezer
+) -> None:
+    """A whole-degree reading flickering at a boundary must not reach the entities."""
+    hass.config.units = US_CUSTOMARY_SYSTEM  # compare in the device's own °F
+    await _setup(hass)
+    client = hass.config_entries.async_entries(DOMAIN)[0].runtime_data.client
+    cabin_changes: list[str] = []
+
+    @callback
+    def _listen(event: Event) -> None:
+        if event.data["entity_id"] == CABIN:
+            cabin_changes.append(event.data["new_state"].state)
+
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _listen)
+
+    async def report(raw: int) -> None:
+        fake_device.status[10] = raw
+        # A status reply already in flight (e.g. a write ack) can answer the
+        # request first; ask until the client has seen this reading.
+        for _ in range(3):
+            await client.async_request_status(wait=True)
+            if client.state.current_temp == raw:
+                break
+        await hass.async_block_till_done()
+        assert client.state.current_temp == raw
+
+    assert hass.states.get(CABIN).state == "76"
+    for raw in (75, 76, 75, 76, 75, 76, 75, 76):
+        await report(raw)
+    assert cabin_changes == ["75"]  # one step in the cooling direction, then silence
+    assert hass.states.get(CLIMATE).attributes["current_temperature"] == 75
+
+    # A reversal that persists is shown after the hold, even with no new report.
+    freezer.tick(REVERSAL_HOLD + 1)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(CABIN).state == "76"
+
+    # While heating, each new degree appears at once and boundary flicker does not.
+    await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
+    await hass.async_block_till_done()
+    cabin_changes.clear()
+    for raw in (77, 76, 77, 78, 77, 78, 79):
+        await report(raw)
+    assert cabin_changes == ["77", "78", "79"]
