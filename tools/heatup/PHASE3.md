@@ -109,9 +109,10 @@ The open questions are settled: the automation doesn't set the session (the acti
 
 Still to do:
 
-- **Hardware checks** (need the owner; they run the heaters): a ready-by session over 60 minutes counts down from above 60 and stops at 0:00; the length is put back afterwards; the 0:00 power-flag clear behaves.
+- ~~Hardware checks~~ **done 2026-10-14** (ready by 08:42, 140 °F, 30 min; room 75 °F, default model, not a cold start because of a 5 s on/off at 06:35). It started at 07:56 with a 76-minute session; the countdown passed 61 → 60 → 59 normally. The cabin reached 140 °F at 08:39:28, 43.4 min in, against the 46 min planned, so 2.5 min early and 32 min at temperature. At 0:00 (09:11:51) the power flag was cleared within a second, the controller reset to 76, and 60 was written back by 09:11:54. The upgrade heater's relay cycled with the thermostat throughout.
+- **Ready at jitters:** near the target it flipped between neighbouring minutes about 25 times in 15 minutes (08:39 ↔ 08:42). A minute or two of hysteresis would quiet it; not done yet.
 - **Released:** v0.3.2 (filter fix, setup step, 90-minute cap), then Phase 3 as v0.4.0, both 2026-10-13.
-- Afterwards, in the `ha-master-bath-dashboard` repo: show "~" and "ready 7:42" on the sauna card.
+- ~~Dashboard~~ done in `ha-master-bath-dashboard` v1.2.0: "Heating · ready ~7:42", a ready-by sheet behind a clock button (defaults from `last_*`, lit while a plan is pending or `running`), and a heat button that's lit while heating.
 - Tests jump the clock with `freezer`; `tests/test_estimate.py` pushes the client heartbeat out of the way, since a ping in flight across a jump times out and drops the fake connection.
 
 ## Repo state at handoff

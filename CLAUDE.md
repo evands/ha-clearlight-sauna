@@ -24,7 +24,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
   - byte2: RIGHT full-spectrum heater intensity, 0–100 %
   - byte3: LEFT full-spectrum heater intensity, 0–100 %
   - byte4: setpoint (°F)
-  - bytes 5–6: hours/minutes. Session length when off; **counts down once a minute while heating**. The keypad stores 60 min as 0 h 60 min. Since v0.3.2 the integration allows up to 90 min (the owner's call, 2026-10-13; the keypad stops at 60), written the same way as 0 h 90 min. **A countdown from above 60 hasn't been seen on hardware yet**; check the first 90-minute session counts down and stops at 0:00.
+  - bytes 5–6: hours/minutes. Session length when off; **counts down once a minute while heating**. The keypad stores 60 min as 0 h 60 min. Since v0.3.2 the integration allows up to 90 min (the owner's call, 2026-10-13; the keypad stops at 60), written the same way as 0 h 90 min. **Verified 2026-10-14** with a 76-minute ready-by session: the controller counts down from above 60 (61 → 60 → 59 a minute apart) and stops at 0:00 as usual.
   - bytes 7–8: reservation fields (untested)
   - byte9: `SN` (unknown)
   - byte10: cabin temp (°F)
@@ -55,7 +55,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 - **Calibration:** only from cold starts (idle 3 h+, within 5 °F of room, 10 min / 15 °F of heat-up); blended at session end. The reset button restores the defaults.
 - **`clearlight_sauna.schedule_ready`** (on the climate entity): ready by, temperature (HA's unit), minutes at temperature. The integration starts the sauna at ready by minus the planning ETA, with setpoint = target and session = ceil(ETA) + minutes at temperature, up to 180 min (heat-up over 90 min from room is refused). This is the only path that writes a session over 90. Scheduled start's attributes also carry `running` (a ready session is heating) and `last_*` (the last request, persisted), which the master-bath dashboard's ready-by form uses.
 - **Entity IDs on the owner's HA** have the area prefix (`sensor.master_bathroom_clearlight_sauna_time_to_target`, etc.) for entities created since v0.4.0: HA 2026.10 builds new IDs from area + device + name (entity registry setting `entity_id_parts`). Older entities keep `clearlight_sauna_…`.
-- **Session length is restored** after a ready session. It's written back only once the session has been seen heating and then stops; at 0:00 the power flag is cleared first. **Never write SET_MINUTE while the power flag is set:** the effect mid-session is unverified.
+- **Session length is restored** after a ready session. It's written back only once the session has been seen heating and then stops; at 0:00 the power flag is cleared first. Verified 2026-10-14: at 0:00 the power flag was cleared within 1 s, the controller reset the timer to the ready length (76), and the old 60 was written back 1.5 s later. **Never write SET_MINUTE while the power flag is set:** the effect mid-session is unverified.
 - **Tests:** `tests/test_estimate.py` jumps the clock with `freezer` and sets `protocol.PING_INTERVAL` huge, since a heartbeat in flight across a jump times out and drops the fake connection. The fake now treats a session length written while off as its configured length.
 
 ## Safety rules when touching real hardware
