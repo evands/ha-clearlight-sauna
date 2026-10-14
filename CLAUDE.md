@@ -5,7 +5,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 ## Layout
 - `custom_components/clearlight_sauna/protocol.py`: LAN client with no HA imports; must stay Python 3.9-compatible so it can be bench-tested with macOS system Python.
 - `coordinator.py` is push-driven, with a 60 s watchdog poll. Entities live in `climate`, `light`, `number`, `sensor` and `switch`.
-- `heatup.py`: the heat-up model behind the planned time-to-target sensors (Phase 3 draft, no HA imports, not wired in yet). **Phase 3 continues from `tools/heatup/PHASE3.md`.** `tools/heatup/` also holds the calibration runs (`data/`), `fit.py`, and `evaluate_live.py`, which replays the runs through `heatup.py`.
+- `heatup.py`: the heat-up model (no HA imports). `estimate.py` wires it in: time to target, ready at, scheduled start, the ready-by action and calibration (see below). Design and replay results: `tools/heatup/PHASE3.md`. `tools/heatup/` also holds the calibration runs (`data/`), `fit.py`, and `evaluate_live.py`, which replays the runs through `heatup.py`.
 - `tests/fake_gagent.py`: a simulated controller. Frame layouts match real captures; the device identity in it is **synthetic**.
 - CI (`.github/workflows/validate.yml`) runs hassfest, the HACS action, and pytest on the latest HA (Python 3.14), on push and weekly.
 
@@ -49,6 +49,13 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 - **Mode-lost detection:** the coordinator raises a Repairs issue (`heater_mode_lost_<entry_id>`, severity error) after `HEATER_MODE_LOST_DELAY` (10 s) if bit 5 is set while not heating. It clears when bit 5 is off while not heating, and on unload.
 - **Limitation:** a mode lost with AUX *off* can't be distinguished from a satisfied thermostat, so it isn't flagged. That case is safe (the receptacle stays dead) but the heater won't run.
 - **When off:** the AUX switch stays and the binary_sensor is removed.
+
+## Heat-up estimate and ready by (Phase 3, v0.4.0)
+- **Estimator:** `coordinator.estimator` (`estimate.py`) is fed every state (push, poll, filter recheck) plus a 15 s tick while heating or while a plan or restore is pending. Entities read the frozen `estimator.output`. Persisted in `Store` `clearlight_sauna.heatup.<entry_id>` (calibration, room, idle since, plan, restore length), flushed on unload, deleted in `async_remove_entry`.
+- **Calibration:** only from cold starts (idle 3 h+, within 5 °F of room, 10 min / 15 °F of heat-up); blended at session end. The reset button restores the defaults.
+- **`clearlight_sauna.schedule_ready`** (on the climate entity): ready by, temperature (HA's unit), minutes at temperature. The integration starts the sauna at ready by minus the planning ETA, with setpoint = target and session = ceil(ETA) + minutes at temperature, up to 180 min (heat-up over 90 min from room is refused). This is the only path that writes a session over 90.
+- **Session length is restored** after a ready session. It's written back only once the session has been seen heating and then stops; at 0:00 the power flag is cleared first. **Never write SET_MINUTE while the power flag is set:** the effect mid-session is unverified.
+- **Tests:** `tests/test_estimate.py` jumps the clock with `freezer` and sets `protocol.PING_INTERVAL` huge, since a heartbeat in flight across a jump times out and drops the fake connection. The fake now treats a session length written while off as its configured length.
 
 ## Safety rules when touching real hardware
 - Use bounded, single-purpose commands. Restore state afterwards and report exactly what changed.

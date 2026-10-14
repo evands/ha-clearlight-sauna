@@ -66,6 +66,49 @@
       },
       "time_remaining": {
         "name": "Time remaining"
+      },
+      "time_to_target": {
+        "name": "Time to target",
+        "state_attributes": {
+          "approximate": {
+            "name": "Approximate"
+          },
+          "ceiling_f": {
+            "name": "Ceiling (°F)"
+          },
+          "room_temperature_f": {
+            "name": "Room temperature (°F)"
+          },
+          "delta_t_f": {
+            "name": "Rise above room (°F)"
+          },
+          "time_constant_min": {
+            "name": "Time constant (min)"
+          },
+          "calibration_sessions": {
+            "name": "Calibration sessions"
+          }
+        }
+      },
+      "ready_at": {
+        "name": "Ready at"
+      },
+      "scheduled_start": {
+        "name": "Scheduled start",
+        "state_attributes": {
+          "ready_by": {
+            "name": "Ready by"
+          },
+          "target_temperature_f": {
+            "name": "Target temperature (°F)"
+          },
+          "minutes_at_temperature": {
+            "name": "Minutes at temperature"
+          },
+          "session_minutes": {
+            "name": "Session length"
+          }
+        }
       }
     },
     "switch": {
@@ -76,6 +119,11 @@
     "binary_sensor": {
       "heater_relay": {
         "name": "Heater relay"
+      }
+    },
+    "button": {
+      "reset_calibration": {
+        "name": "Reset heat-up calibration"
       }
     }
   },
@@ -96,6 +144,38 @@
     "heater_mode_lost": {
       "title": "{name}: upgrade heater mode is off",
       "description": "The sauna's AUX output is on while the sauna isn't heating. That means the controller has left upgrade-heater mode, usually because AUX was toggled in the Clearlight app. The heater receptacle is no longer tied to the session timer or thermostat.\n\nTo fix it, at the keypad: turn the sauna on, switch the display to °C, set 60 °C, then hold AUX for 5 seconds until it beeps. Then turn the sauna off. This warning clears when the AUX output turns off together with the sauna."
+    }
+  },
+  "services": {
+    "schedule_ready": {
+      "name": "Schedule ready by",
+      "description": "Have the sauna at a temperature by a time of day. The integration starts it early enough, from its heat-up estimate, and sets the session to the heat-up time plus the time at temperature.",
+      "fields": {
+        "ready_by": {
+          "name": "Ready by",
+          "description": "Time of day the sauna should be at temperature: the next time this clock time comes round."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Target temperature, in your Home Assistant temperature unit."
+        },
+        "minutes_at_temperature": {
+          "name": "Minutes at temperature",
+          "description": "How long the session runs once the target is expected to be reached."
+        }
+      }
+    },
+    "cancel_ready": {
+      "name": "Cancel ready by",
+      "description": "Drop a pending ready-by plan. A session already running isn't stopped."
+    }
+  },
+  "exceptions": {
+    "target_out_of_reach": {
+      "message": "{target} °F can't be reached within {minutes} minutes from room temperature, by this sauna's heat-up estimate."
+    },
+    "temperature_out_of_range": {
+      "message": "The temperature must be between {min} and {max}."
     }
   }
 }

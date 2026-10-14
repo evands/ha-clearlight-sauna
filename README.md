@@ -20,10 +20,15 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 | `binary_sensor.clearlight_sauna_heater_relay` | Read-only: heaters energized (only when the upgrade-heater option is on) |
 | `sensor.clearlight_sauna_cabin_temperature` | Cabin temperature, for history and automations |
 | `sensor.clearlight_sauna_time_remaining` | Minutes left in the session; 0 when off |
+| `sensor.clearlight_sauna_time_to_target` | Minutes until the cabin reaches the setpoint; when off, how long a heat-up would take |
+| `sensor.clearlight_sauna_ready_at` | When the cabin is expected to reach the setpoint (or did) |
+| `sensor.clearlight_sauna_scheduled_start` | When a [ready-by](#ready-by) plan will start the sauna |
+| `button.clearlight_sauna_reset_heat_up_calibration` | Forget what the heat-up estimate has learned (configuration) |
 
 - **Push updates.** The sauna pushes every state change, including changes made at the keypad or in the app, so Home Assistant doesn't need to poll.
 - **Survives restarts and IP changes.** If the sauna is power-cycled, the integration reconnects. If DHCP gives the sauna a new address, the integration finds it again by MAC.
 - **Per-heater intensity.** The two full-spectrum heaters can be set independently, from 0 (off) to 100 %.
+- **Heat-up estimate that learns your sauna.** See [Time to target and ready by](#time-to-target-and-ready-by).
 - **Fahrenheit internally.** The controller always reports °F, even when its display is set to °C. Home Assistant converts to your unit system.
 
 ## Installation
@@ -56,7 +61,7 @@ If you try a model that isn't listed, please [open an issue](https://github.com/
 
 ## Safety
 
-This integration can turn infrared heaters on when nobody is in the room, exactly as the official app's remote start can. Clearlight's warnings about towels or other items on or against the heaters apply to every remote start. The integration caps sessions at 90 minutes, and the sauna turns off when the session timer runs out. That's 30 minutes more than the keypad allows, because the timer includes the heat-up: from a cold cabin, 140 °F takes about 45 minutes, so a 60-minute session leaves only about 15 at temperature.
+This integration can turn infrared heaters on when nobody is in the room, exactly as the official app's remote start can. Clearlight's warnings about towels or other items on or against the heaters apply to every remote start. The integration caps manual sessions at 90 minutes, and the sauna turns off when the session timer runs out. That's 30 minutes more than the keypad allows, because the timer includes the heat-up: from a cold cabin, 140 °F takes about 45 minutes, so a 60-minute session leaves only about 15 at temperature. A [ready-by](#ready-by) session runs for the heat-up estimate plus up to 90 minutes at temperature, at most 180 minutes in all.
 
 Use automations that start the sauna with care, and consider a notification whenever heating starts.
 
@@ -80,6 +85,51 @@ Clearlight's support pages describe pressing AUX three times on saunas with a bu
 ### When the timer runs out
 
 When the session timer reaches 0:00, the heaters stop, but the controller keeps its power flag set. The integration shows this as **Off**, with `hvac_action: idle` and `session_ended: true`. Turning the climate entity on from this state cycles power, so a fresh session starts. Powering off resets the timer to the configured length.
+
+## Time to target and ready by
+
+The integration estimates how long the cabin takes to reach its setpoint, and can have the sauna at a temperature by a given time.
+
+### The estimate
+
+With the heaters on, the cabin warms like a single mass heading for a ceiling some way above room temperature, and the approach slows as it gets closer. The integration starts from values measured on a Sanctuary 2 and adjusts them to your sauna:
+
+- **During a session** it refits the ceiling to the readings so far. **Time to target** carries an `approximate: true` attribute until there are 5 minutes of data. Dashboards can show "~" in front of the number while that's true.
+- **After a session that started from a cold cabin** (idle 3 hours or more, within 5 °F of room temperature, and heating for at least 10 minutes), the result is blended into the stored values. Warm starts don't count.
+- **Room temperature** is the cabin reading once the sauna has been idle for 3 hours.
+
+When the sauna is off, **Time to target** shows how long a session started now would take to reach the setpoint. It's unknown when the setpoint is above what the cabin levels off at. Press **Reset heat-up calibration** after a hardware change, such as adding the upgrade heater; the estimate then learns again over the next cold starts.
+
+### Ready by
+
+The **Schedule ready by** action (`clearlight_sauna.schedule_ready`) takes three values:
+
+- `ready_by`: the time of day the sauna should be at temperature (the next time that clock time comes round);
+- `temperature`: the target, in your Home Assistant unit;
+- `minutes_at_temperature`: how long the session should run once it gets there.
+
+The integration then starts the sauna at the right time itself, using the current cabin temperature: the start is ready by minus the heat-up estimate. It sets the target as the setpoint and the session to the heat-up estimate plus the time at temperature, so the time at temperature starts when the target is expected to be reached. **Scheduled start** shows when that will be. When the session ends, the session length the controller had before is put back, so the next keypad session isn't the long one. If it ended by running out of time, the integration first clears the power flag the controller leaves set at 0:00; the heaters are already off by then. A target that would take more than 90 minutes to reach from room temperature is refused. A ready-by session can therefore run up to 180 minutes, longer than a manual one (see [Safety](#safety)).
+
+Call the action any time before the start, for example from an early-morning automation:
+
+```yaml
+triggers:
+  - trigger: time
+    at: "04:00:00"
+conditions:
+  - condition: time
+    weekday: [mon, tue, wed, thu, fri]
+actions:
+  - action: clearlight_sauna.schedule_ready
+    target:
+      entity_id: climate.clearlight_sauna
+    data:
+      ready_by: "07:00:00"
+      temperature: 140
+      minutes_at_temperature: 45
+```
+
+A new call replaces the pending plan, and **Cancel ready by** (`clearlight_sauna.cancel_ready`) drops it. If the sauna is already heating at the planned start, the plan is dropped and the running session is left alone. Plans survive a Home Assistant restart.
 
 ## Security
 

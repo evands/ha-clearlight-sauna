@@ -23,4 +23,5 @@ async def async_get_config_entry_diagnostics(
         "connected": client.connected,
         "module_info": asdict(client.module_info) if client.module_info else None,
         "state": state_dict,
+        "heatup": entry.runtime_data.estimator.diagnostics(),
     }

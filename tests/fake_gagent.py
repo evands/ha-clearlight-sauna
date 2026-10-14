@@ -75,6 +75,9 @@ class FakeGAgent:
         for dp, off in p.UINT8_BYTES.items():
             if flags >> dp & 1:
                 self.status[off] = vals[off]
+        if flags >> p.DP_SET_MINUTE & 1 and not self.status[0] & 0x08:
+            # Set while off, the session time becomes the configured length.
+            self.session_length = vals[6]
         if flags >> p.DP_POWER & 1 and not vals[0] & 0x08:
             # Real controller: power off resets the timer to the configured length.
             self.status[5], self.status[6] = 0, self.session_length

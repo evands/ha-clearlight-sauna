@@ -30,3 +30,15 @@ SESSION_MIN_MINUTES = 5
 SESSION_MAX_MINUTES = 90
 SESSION_STEP_MINUTES = 5
 
+# Ready-by sessions run for the heat-up estimate plus the time at temperature,
+# so they may be longer than a manual one. A target that would take more than
+# READY_MAX_HEATUP_MINUTES to reach from room temperature is refused.
+READY_MAX_HEATUP_MINUTES = 90
+READY_HOLD_MIN_MINUTES = 5
+READY_HOLD_MAX_MINUTES = 90
+READY_SESSION_MAX_MINUTES = READY_MAX_HEATUP_MINUTES + READY_HOLD_MAX_MINUTES
+
+SERVICE_SCHEDULE_READY = "schedule_ready"
+SERVICE_CANCEL_READY = "cancel_ready"
+ATTR_READY_BY = "ready_by"
+ATTR_MINUTES_AT_TEMPERATURE = "minutes_at_temperature"

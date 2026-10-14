@@ -15,7 +15,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_UPGRADE_HEATER, DOMAIN, HEATER_MODE_LOST_DELAY, WATCHDOG_INTERVAL
-from .protocol import DP_POWER, ClearlightClient, GizwitsError, SaunaState
+from .estimate import HeatUpEstimator
+from .protocol import (
+    DP_POWER,
+    DP_SET_HOUR,
+    DP_SET_MINUTE,
+    DP_SET_TEMP,
+    ClearlightClient,
+    GizwitsError,
+    SaunaState,
+)
 from .temperature import CabinTempFilter
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +62,8 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         self._temp_timer: Callable[[], None] | None = None
         self._was_heating: bool | None = None
         self.cabin_temp: int | None = None
+        # Time to target, room temperature, calibration and ready-by plans.
+        self.estimator = HeatUpEstimator(self)
         client.set_callbacks(self._handle_state, self._handle_connection)
 
     @property
@@ -72,6 +83,7 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
     def async_set_state(self, state: SaunaState) -> None:
         """Publish a new device state (push, or the first status at setup)."""
         self._filter_cabin_temp(state)
+        self.estimator.async_update(state)
         self.async_set_updated_data(state)
         self.async_check_heater_mode(state)
 
@@ -104,6 +116,7 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         self._temp_timer = None
         state = self.client.state or self.data
         if state is not None and self._filter_cabin_temp(state):
+            self.estimator.async_update(state)
             self.async_update_listeners()
 
     @callback
@@ -194,6 +207,7 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         if state is None:
             raise UpdateFailed("no status from sauna")
         self._filter_cabin_temp(state)
+        self.estimator.async_update(state)
         return state
 
     async def async_set_power(self, on: bool) -> None:
@@ -206,14 +220,50 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         """
         state = self.client.state
         if on and state is not None and state.session_ended:
-            await self.async_write({DP_POWER: 0})
-            try:
-                await self.client.async_request_status(wait=True)
-            except (GizwitsError, TimeoutError) as err:
-                raise HomeAssistantError(f"Sauna did not confirm power off: {err}") from err
+            await self._async_power_off_confirmed()
         if on and self.client.state is not None and self.client.state.heating:
             return
         await self.async_write({DP_POWER: int(on)})
+
+    async def _async_power_off_confirmed(self) -> None:
+        await self.async_write({DP_POWER: 0})
+        try:
+            await self.client.async_request_status(wait=True)
+        except (GizwitsError, TimeoutError) as err:
+            raise HomeAssistantError(f"Sauna did not confirm power off: {err}") from err
+
+    async def async_start_session(self, target: int, minutes: int) -> int:
+        """Start a session at `target` °F lasting `minutes`; return the old length.
+
+        The length is set while the sauna is off, as the session-time entity
+        does, so it is what the controller counts down from at power-on.
+        """
+        state = self.client.state
+        if state is None:
+            raise HomeAssistantError("No status from the sauna")
+        if state.heating:
+            raise HomeAssistantError("The sauna is already heating")
+        if state.session_ended:
+            await self._async_power_off_confirmed()  # also resets the timer
+        previous = self.client.state.session_minutes
+        await self.async_write({DP_SET_TEMP: target, DP_SET_HOUR: 0, DP_SET_MINUTE: minutes})
+        await self.async_write({DP_POWER: 1})
+        return previous
+
+    async def async_restore_session_length(self, minutes: int) -> None:
+        """After a ready-by session, set the length the controller had before.
+
+        Never while heating. At 0:00 the power flag is still set (the heaters
+        are already off); clear it first so the timer isn't written mid-session.
+        """
+        state = self.client.state
+        if state is None or state.heating:
+            return
+        if state.power:
+            await self._async_power_off_confirmed()
+        state = self.client.state
+        if state is not None and not state.power and state.session_minutes != minutes:
+            await self.async_write({DP_SET_HOUR: 0, DP_SET_MINUTE: minutes})
 
     async def async_write(self, changes: dict[int, int]) -> None:
         """Send a write; surface failures to the caller of the service."""

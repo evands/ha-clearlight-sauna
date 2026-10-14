@@ -1,0 +1,35 @@
+schedule_ready:
+  target:
+    entity:
+      integration: clearlight_sauna
+      domain: climate
+  fields:
+    ready_by:
+      required: true
+      example: "07:00:00"
+      selector:
+        time:
+    temperature:
+      required: true
+      example: 140
+      selector:
+        number:
+          min: 20
+          max: 175
+          step: 1
+          mode: box
+    minutes_at_temperature:
+      required: true
+      default: 45
+      selector:
+        number:
+          min: 5
+          max: 90
+          step: 5
+          unit_of_measurement: min
+
+cancel_ready:
+  target:
+    entity:
+      integration: clearlight_sauna
+      domain: climate

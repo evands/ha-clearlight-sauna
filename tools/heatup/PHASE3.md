@@ -1,6 +1,6 @@
 # Phase 3: time-to-target in the integration
 
-Design and handoff, written 2026-10-13 at the end of a cloud session. The model is drafted and tested; **nothing is wired into the integration yet**. Continue in Claude Code on the Mac.
+Design and handoff, written 2026-10-13 at the end of a cloud session. **Built the same day in Claude Code on the Mac** (`estimate.py` and the entities below, 58 tests passing), with the owner's ready-by decisions folded in, and released as v0.4.0; see [Status](#status-2026-10-13).
 
 ## Goal (the owner's plan)
 
@@ -8,6 +8,7 @@ Design and handoff, written 2026-10-13 at the end of a cloud session. The model 
 - **Self-calibrating**, because other people's saunas differ: start each session from stored values, refit ΔT with τ held fixed as it heats, and blend the result into the stored values at session end.
 - Show **"~"** until there are about 5 minutes of heat-up data.
 - The payoff is the reverse: a **"ready by 7:00"** automation that starts the sauna at 7:00 minus the ETA for the current room temperature.
+- **Ready by takes three inputs** (owner, 2026-10-13): ready by, target temperature, and session length, where the session length starts when the temperature is estimated to be reached.
 
 ## What's already here
 
@@ -62,50 +63,60 @@ The first ~10 minutes heat faster than one exponential allows, so a fixed-τ fit
 5. **Room temperature:** the de-dithered cabin reading once the sauna has been idle 3 h (it took 3-4 h to settle on 2026-10-13), persisted. Used for planning ETAs, warm starts, and to turn a session's ceiling into ΔT.
 6. **Home Assistant restart mid-session:** start a new `HeatUp` from that moment, marked not cold (no calibration); the live fit still works because the model is memoryless.
 7. **Persistence:** `homeassistant.helpers.storage.Store`, key `clearlight_sauna.heatup.<entry_id>`: calibration, room temperature and when it was taken, when heating last stopped. Delete it in `async_remove_entry`.
+8. **Ready by is an action** (owner's choice over device entities): `clearlight_sauna.schedule_ready` on the climate entity, with `ready_by` (time of day; the next occurrence), `temperature` (HA's unit, converted to °F) and `minutes_at_temperature` (5-90). An automation calls it any time beforehand; the integration starts the sauna itself. This replaces the planned `time` Ready by entity and the Start by sensor with its 15-minute freeze, which existed only so a `time` trigger couldn't be skipped. `cancel_ready` drops a pending plan. One pending plan per sauna; a new call replaces it.
+9. **Start time:** recomputed every 15 s as ready by minus the planning ETA from the current cabin temperature, rounded down to the minute (the Scheduled start sensor shows the same minute). Already heating at that point: the plan is dropped and the session left alone. Ready by passed without a start (sauna unreachable): dropped with a warning.
+10. **Session length = heat-up estimate + time at temperature** (owner's decision): written as the session length before power-on, the way the session-time entity does it. Over 90 minutes is allowed for these sessions (owner: "raise the cap"): the action refuses a target that would take more than `READY_MAX_HEATUP_MINUTES` (90) to reach from room temperature, so a session is at most 180 minutes. The manual slider stays at 90.
+11. **Restore the session length afterwards:** a long ready-by length would otherwise become the controller's configured length, and the next keypad session would run for it. The length from before is persisted and written back once the session has been seen heating and then stops. At 0:00 the power flag is cleared first (heaters already off) so the timer is never written while the power flag is set. If the session is never seen heating within 2 minutes of the start, the length is put back anyway.
+12. **Calibration reset:** a button entity in the configuration category (owner's choice), back to the defaults.
+13. **Near-ceiling fallback:** when the live ceiling is within 2 °F of the target, the ETA comes from the slope of the last 5 minutes (smoothed) while it's still climbing at least 0.1 °F/min, marked approximate.
 
-## Entities to add
+## Entities and actions (built)
 
-| Entity | State | Notes |
+| Entity / action | State | Notes |
 |---|---|---|
-| `sensor` **Time to target** (`time_to_target`), duration, min | Heating: minutes left (0 once reached; readings within 3 °F below the target still count as there, since the controller cycles). Off: heat-up time if started now. Unknown when the target is out of reach. | Attributes: `approximate`, `ceiling_f`, `room_temperature_f`, `delta_t_f`, `time_constant_min`, `calibration_sessions`. |
+| `sensor` **Time to target** (`time_to_target`), duration, min | Heating: minutes left (0 once reached; readings within 3 °F below the target still count as there). Off: heat-up time if started now. Unknown when out of reach. | Attributes: `approximate`, `ceiling_f`, `room_temperature_f`, `delta_t_f`, `time_constant_min`, `calibration_sessions`. |
 | `sensor` **Ready at** (`ready_at`), timestamp | Heating: now + time left, rounded up to the minute; once reached, when it was reached. Off: unknown. | |
-| `time` **Ready by** (`ready_by`), config category | Default 07:00, restored across restarts. | New platform: add `Platform.TIME`. |
-| `sensor` **Start by** (`start_by`), timestamp | The next Ready by minus the heat-up time from the current cabin temperature, rounded down to the minute. Unknown while heating or when unreachable. | **Freeze it once it's within 15 min**, so a `time` trigger on it can't be skipped by the value moving into the past. |
+| `sensor` **Scheduled start** (`scheduled_start`), timestamp | When a pending ready-by plan will start the sauna. Unknown with no plan. | Attributes: `ready_by`, `target_temperature_f`, `minutes_at_temperature`, `session_minutes`. |
+| `button` **Reset heat-up calibration** (`reset_calibration`), config | | |
+| `clearlight_sauna.schedule_ready` / `cancel_ready` | | Target: the climate entity. Errors `target_out_of_reach`, `temperature_out_of_range` are translated. |
 
-Only publish a change when an output actually changes (the sampling timer runs every 15 s).
+Outputs are a frozen `Estimate` dataclass on `coordinator.estimator.output`; listeners are only notified from the 15 s tick when it changes.
 
-The ready-by automation then needs no templates:
+The ready-by automation:
 
 ```yaml
 triggers:
   - trigger: time
-    at: sensor.clearlight_sauna_start_by
+    at: "04:00:00"
 conditions:
   - condition: time
     weekday: [mon, tue, wed, thu, fri]
 actions:
-  - action: climate.turn_on
+  - action: clearlight_sauna.schedule_ready
     target:
       entity_id: climate.clearlight_sauna
+    data:
+      ready_by: "07:00:00"
+      temperature: 140
+      minutes_at_temperature: 45
 ```
 
-## Open questions for the owner
+## Status (2026-10-13)
 
-- **The session timer includes the heat-up.** Sessions max out at 60 min, and 140 °F takes ~45 min from cold, so a ready-by start leaves ~15 min at temperature, less with the default 10-min session. Should the automation set the session to 60 first? Should the integration offer to restart the timer when the target is reached (power off, then on, which resets it)? That changes what the heater does, so it's the owner's call.
-- **Near-ceiling targets.** If calibration ends with the ceiling within 2 °F of the target, the ETA reads unknown even though the cabin is still climbing (seen in the PRIOR_SESSIONS = 0 replay). A fallback from the recent slope would cover it.
-- **Calibration reset:** a button, or only the store file? The owner may want one after hardware changes (the upgrade heater adds 300 W).
+Built: `estimate.py` (estimator, plans, persistence), hooks in `coordinator.py` and `__init__.py`, the sensors, `button.py`, `services.yaml`, translations, diagnostics, `tests/test_estimate.py` (9 integration tests on the fake device: planning ETA, cold session to target with "~" for 5 min and calibration, warm start, ready-by start and restore, 0:00 restore, refusals, reload and cancel, reset button, °C input). README section "Time to target and ready by". The fake controller now takes a session length written while off as its configured length, as the real one does.
 
-## Implementation steps
+The open questions are settled: the automation doesn't set the session (the action does, from the estimate); no timer restart at target; calibration reset is a button; near-ceiling uses the slope fallback.
 
-1. Read `heatup.py` and `tests/test_heatup.py`; they're the contract.
-2. Add an estimator (e.g. `estimate.py`) owned by the coordinator: load and save the store, a 15 s timer while heating, session start and end, room tracking, outputs as a small dataclass the entities read; `async_update_listeners()` only on change.
-3. Hook it into `coordinator.async_set_state` and `_async_update_data`, and load the store in `async_setup_entry` before forwarding platforms.
-4. Entities: three sensors in `sensor.py`, the new `time.py`, names in `translations/en.json` under `entity.sensor` / `entity.time`. Calibration and session state go in `diagnostics.py`.
-5. Integration tests with the fake device and `freezer` (see `test_cabin_temperature_dither_is_filtered`): off shows a planning ETA marked approximate; heating with rising readings drops "~" after 5 minutes; reaching the target gives 0 and a Ready at; session end blends and saves (sessions 1); a warm start doesn't calibrate; Start by freezes inside 15 min.
-6. Docs: a README section with the automation above, a CLAUDE.md entry, `manifest.json` 0.4.0.
-7. Afterwards, in the `ha-master-bath-dashboard` repo: show "~" and "ready 7:42" on the sauna card.
+Still to do:
+
+- **Hardware checks** (need the owner; they run the heaters): a ready-by session over 60 minutes counts down from above 60 and stops at 0:00; the length is put back afterwards; the 0:00 power-flag clear behaves.
+- **Released:** v0.3.2 (filter fix, setup step, 90-minute cap), then Phase 3 as v0.4.0, both 2026-10-13.
+- Afterwards, in the `ha-master-bath-dashboard` repo: show "~" and "ready 7:42" on the sauna card.
+- Tests jump the clock with `freezer`; `tests/test_estimate.py` pushes the client heartbeat out of the way, since a ping in flight across a jump times out and drops the fake connection.
 
 ## Repo state at handoff
+
+(As the cloud session left it; superseded by [Status](#status-2026-10-13).)
 
 - `origin/main` is at 14e7315. Local commits on top: the 10-13 run data, the cabin-filter redesign that never made it into the pushed v0.3.2 (`temperature.py`: heat-up dips of 2-3 °F are now held, only 5+ °F against the trend passes at once), and this handoff.
 - **v0.3.2 isn't released yet** (HACS has v0.3.1 installed). The filter commit belongs in it, and so does the setup-flow work below, which documents itself as v0.3.2. Release once that's committed, pushed and through CI. Then Phase 3 as v0.4.0.

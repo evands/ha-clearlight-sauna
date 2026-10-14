@@ -1,6 +1,9 @@
-"""Cabin temperature and session time remaining."""
+"""Cabin temperature, session time remaining, and the heat-up estimate."""
 
 from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -27,6 +30,9 @@ async def async_setup_entry(
         [
             ClearlightCabinTemperature(coordinator, "cabin_temperature"),
             ClearlightTimeRemaining(coordinator, "time_remaining"),
+            ClearlightTimeToTarget(coordinator, "time_to_target"),
+            ClearlightReadyAt(coordinator, "ready_at"),
+            ClearlightScheduledStart(coordinator, "scheduled_start"),
         ]
     )
 
@@ -59,3 +65,68 @@ class ClearlightTimeRemaining(ClearlightEntity, SensorEntity):
     def native_value(self) -> int:
         s = self.state_data
         return s.session_minutes if s.power else 0
+
+
+class ClearlightTimeToTarget(ClearlightEntity, SensorEntity):
+    """Minutes until the cabin reaches the setpoint.
+
+    Heating: the live estimate, 0 once there. Off: the heat-up time if a
+    session started now. Unknown when the setpoint is out of reach.
+    """
+
+    _attr_translation_key = "time_to_target"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_icon = "mdi:thermometer-chevron-up"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.estimator.output.minutes
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        estimator = self.coordinator.estimator
+        out, cal = estimator.output, estimator.calibration
+        return {
+            # True until five minutes of this session's data back the number.
+            "approximate": out.approximate,
+            "ceiling_f": out.ceiling,
+            "room_temperature_f": out.room,
+            "delta_t_f": round(cal.delta_t, 1),
+            "time_constant_min": round(cal.tau / 60, 1),
+            "calibration_sessions": cal.sessions,
+        }
+
+
+class ClearlightReadyAt(ClearlightEntity, SensorEntity):
+    """When the cabin is expected to reach the setpoint (or did); unknown when off."""
+
+    _attr_translation_key = "ready_at"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-check-outline"
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.estimator.output.ready_at
+
+
+class ClearlightScheduledStart(ClearlightEntity, SensorEntity):
+    """When a pending ready-by plan will start the sauna; unknown with no plan."""
+
+    _attr_translation_key = "scheduled_start"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-start"
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.estimator.output.scheduled_start
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        out = self.coordinator.estimator.output
+        return {
+            "ready_by": out.plan_ready_by,
+            "target_temperature_f": out.plan_target,
+            "minutes_at_temperature": out.plan_hold,
+            "session_minutes": out.plan_session_minutes,
+        }
