@@ -122,6 +122,8 @@ class Estimate:
     plan_target: int | None = None
     plan_hold: int | None = None
     plan_session_minutes: int | None = None
+    ready_running: bool = False  # a ready-by session is heating now
+    last_request: tuple[str, int, int] | None = None  # (ready by "HH:MM:SS", °F, minutes)
 
 
 class HeatUpEstimator:
@@ -140,6 +142,8 @@ class HeatUpEstimator:
         self.plan: ReadyPlan | None = None
         # Session length to write back once a ready-by session ends.
         self.restore_minutes: int | None = None
+        # The last schedule_ready request, offered as defaults the next time.
+        self.last_request: tuple[str, int, int] | None = None
         self.session: h.HeatUp | None = None
         self.output = Estimate()
         self._heating: bool | None = None
@@ -165,6 +169,11 @@ class HeatUpEstimator:
         self.plan = ReadyPlan.from_dict(data.get("plan"))
         restore = data.get("restore_minutes")
         self.restore_minutes = restore if isinstance(restore, int) else None
+        last = data.get("last_request")
+        try:
+            self.last_request = (str(last["ready_by"]), int(last["target"]), int(last["hold"]))
+        except (KeyError, TypeError, ValueError):
+            self.last_request = None
 
     def _data(self) -> dict[str, Any]:
         return {
@@ -174,6 +183,11 @@ class HeatUpEstimator:
             "idle_since": self.idle_since,
             "plan": self.plan.as_dict() if self.plan else None,
             "restore_minutes": self.restore_minutes,
+            "last_request": (
+                dict(zip(("ready_by", "target", "hold"), self.last_request))
+                if self.last_request
+                else None
+            ),
         }
 
     @callback
@@ -352,6 +366,8 @@ class HeatUpEstimator:
             plan_target=plan.target if plan else None,
             plan_hold=plan.hold if plan else None,
             plan_session_minutes=plan.session_minutes if plan else None,
+            ready_running=state.heating and self.restore_minutes is not None,
+            last_request=self.last_request,
         )
         changed = out != self.output
         self.output = out
@@ -386,6 +402,7 @@ class HeatUpEstimator:
                 },
             )
         self.plan = ReadyPlan(ready_by=ready.timestamp(), target=target, hold=hold)
+        self.last_request = (ready_by.strftime("%H:%M:%S"), target, hold)
         _LOGGER.info(
             "%s: ready at %d °F by %s, %d min at temperature",
             self._coordinator.config_entry.title, target, ready.isoformat(), hold,
@@ -459,12 +476,11 @@ class HeatUpEstimator:
             self._busy = False
         if self.plan is plan:
             self.plan = None
-        if restore >= SESSION_MIN_MINUTES:
-            self.restore_minutes = restore
-            # Restore only after the session has been seen running: the state
-            # in hand may predate the power-on.
-            self._restore_armed = False
-            self._started_at = self._now()
+        self.restore_minutes = max(restore, SESSION_MIN_MINUTES)
+        # Restore only after the session has been seen running: the state in
+        # hand may predate the power-on.
+        self._restore_armed = False
+        self._started_at = self._now()
         self._save()
         self._refresh()
 

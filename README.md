@@ -8,6 +8,8 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 
 ## Features
 
+Entity IDs below are for a sauna named Clearlight Sauna that isn't in an area. Home Assistant 2026.10 builds the ID of a new entity from its area, device and name, so with the sauna in an area called Master Bathroom, Time to target is created as `sensor.master_bathroom_clearlight_sauna_time_to_target`. Entities that already existed keep their IDs when you update, so an older install can have both forms. **Settings → Devices & services → Entities** shows the actual IDs.
+
 | Entity | What it does |
 |---|---|
 | `climate.clearlight_sauna` | Heat on/off, target temperature (70–175 °F), cabin temperature |
@@ -129,7 +131,7 @@ actions:
       minutes_at_temperature: 45
 ```
 
-A new call replaces the pending plan, and **Cancel ready by** (`clearlight_sauna.cancel_ready`) drops it. If the sauna is already heating at the planned start, the plan is dropped and the running session is left alone. Plans survive a Home Assistant restart.
+A new call replaces the pending plan, and **Cancel ready by** (`clearlight_sauna.cancel_ready`) drops it. Besides the plan, **Scheduled start** has a `running` attribute, true while a ready-by session is heating, and `last_ready_by`, `last_target_temperature_f` and `last_minutes_at_temperature` from the most recent request, for a dashboard form's defaults. If the sauna is already heating at the planned start, the plan is dropped and the running session is left alone. Plans survive a Home Assistant restart.
 
 ## Security
 

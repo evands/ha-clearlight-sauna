@@ -107,6 +107,18 @@
           },
           "session_minutes": {
             "name": "Session length"
+          },
+          "running": {
+            "name": "Ready-by session running"
+          },
+          "last_ready_by": {
+            "name": "Last ready by"
+          },
+          "last_target_temperature_f": {
+            "name": "Last target temperature (°F)"
+          },
+          "last_minutes_at_temperature": {
+            "name": "Last minutes at temperature"
           }
         }
       }

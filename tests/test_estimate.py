@@ -194,6 +194,7 @@ async def test_ready_by_starts_with_heatup_plus_hold_and_restores_length(
     attrs = hass.states.get(START).attributes
     assert attrs["session_minutes"] == session
     assert attrs["target_temperature_f"] == 120
+    assert attrs["running"] is False
     assert not fake_device.status[0] & POWER
 
     # Nothing happens before the start time...
@@ -205,6 +206,12 @@ async def test_ready_by_starts_with_heatup_plus_hold_and_restores_length(
     assert fake_device.status[4] == 120
     assert (fake_device.status[5], fake_device.status[6]) == (0, session)
     assert hass.states.get(START).state == STATE_UNKNOWN
+    attrs = hass.states.get(START).attributes
+    assert attrs["running"] is True
+    # The request stays on offer as the next form's defaults.
+    assert attrs["last_ready_by"] == ready_by.strftime("%H:%M:%S")
+    assert attrs["last_target_temperature_f"] == 120
+    assert attrs["last_minutes_at_temperature"] == 30
 
     # Stopping puts back the length the controller had (10 min), not the long one.
     await hass.services.async_call("climate", "turn_off", {"entity_id": CLIMATE}, blocking=True)
@@ -213,6 +220,7 @@ async def test_ready_by_starts_with_heatup_plus_hold_and_restores_length(
     assert not fake_device.status[0] & POWER
     assert fake_device.status[6] == 10
     assert fake_device.session_length == 10
+    assert hass.states.get(START).attributes["running"] is False
 
 
 async def test_ready_session_timing_out_restores_length(
@@ -274,6 +282,7 @@ async def test_plan_survives_reload_and_can_be_cancelled(
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     assert hass.states.get(START).state == before
+    assert hass.states.get(START).attributes["last_minutes_at_temperature"] == 45
 
     await _call(hass, "cancel_ready")
     assert hass.states.get(START).state == STATE_UNKNOWN

@@ -111,7 +111,11 @@ class ClearlightReadyAt(ClearlightEntity, SensorEntity):
 
 
 class ClearlightScheduledStart(ClearlightEntity, SensorEntity):
-    """When a pending ready-by plan will start the sauna; unknown with no plan."""
+    """When a pending ready-by plan will start the sauna; unknown with no plan.
+
+    The attributes also say whether a ready-by session is running and what was
+    asked for last time.
+    """
 
     _attr_translation_key = "scheduled_start"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -124,9 +128,16 @@ class ClearlightScheduledStart(ClearlightEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         out = self.coordinator.estimator.output
+        last = out.last_request
         return {
             "ready_by": out.plan_ready_by,
             "target_temperature_f": out.plan_target,
             "minutes_at_temperature": out.plan_hold,
             "session_minutes": out.plan_session_minutes,
+            # A ready-by session started by a plan is heating now.
+            "running": out.ready_running,
+            # The last request, for a form's defaults.
+            "last_ready_by": last[0] if last else None,
+            "last_target_temperature_f": last[1] if last else None,
+            "last_minutes_at_temperature": last[2] if last else None,
         }
