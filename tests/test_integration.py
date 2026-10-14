@@ -20,7 +20,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
-from custom_components.clearlight_sauna.const import CONF_MAC, DOMAIN
+from custom_components.clearlight_sauna.const import CONF_MAC, CONF_UPGRADE_HEATER, DOMAIN
 from custom_components.clearlight_sauna.temperature import REVERSAL_HOLD
 
 from .fake_gagent import FAKE_MAC, FakeGAgent
@@ -52,7 +52,13 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
-async def test_config_flow_discovery(hass: HomeAssistant, patch_client) -> None:
+@pytest.mark.parametrize(
+    ("choice", "upgrade_heater", "aux_exists"),
+    [("heater_activated", True, False), ("no_heater", False, True)],
+)
+async def test_config_flow_discovery(
+    hass: HomeAssistant, patch_client, choice: str, upgrade_heater: bool, aux_exists: bool
+) -> None:
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -61,9 +67,19 @@ async def test_config_flow_discovery(hass: HomeAssistant, patch_client) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_HOST: "127.0.0.1"}
     )
+    # Setup won't finish until the upgrade-heater question is answered.
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "upgrade_heater"
+    assert result["menu_options"] == ["heater_activated", "no_heater"]
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": choice}
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_MAC] == FAKE_MAC
+    assert result["options"] == {CONF_UPGRADE_HEATER: upgrade_heater}
     assert result["result"].unique_id == FAKE_MAC
+    await hass.async_block_till_done()
+    assert (hass.states.get(AUX) is not None) is aux_exists
 
 
 async def test_config_flow_manual_cannot_connect(
@@ -126,6 +142,14 @@ async def test_services_write_only_their_field(
     )
     await hass.async_block_till_done()
     assert (fake_device.status[5], fake_device.status[6]) == (0, 60)
+
+    # Past the keypad's 60 minutes, still all in SET_MINUTE.
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": SESSION, "value": 90}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert (fake_device.status[5], fake_device.status[6]) == (0, 90)
+    assert float(hass.states.get(SESSION).state) == 90
 
     await hass.services.async_call(
         "climate", "turn_off", {"entity_id": CLIMATE}, blocking=True

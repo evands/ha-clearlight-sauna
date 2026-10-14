@@ -48,7 +48,9 @@ class ClearlightSessionLength(ClearlightEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         minutes = max(SESSION_MIN_MINUTES, min(SESSION_MAX_MINUTES, int(value)))
         # The controller accepts both 1h00m and 0h60m; every value seen from the
-        # keypad has hour 0, so keep minutes in SET_MINUTE.
+        # keypad has hour 0, so keep minutes in SET_MINUTE. That holds past 60
+        # too (0h90m): the keypad's own 0h60m shows the firmware counts down a
+        # minute byte above 59, but nobody has seen it borrow from SET_HOUR.
         await self.coordinator.async_write({DP_SET_HOUR: 0, DP_SET_MINUTE: minutes})
 
 

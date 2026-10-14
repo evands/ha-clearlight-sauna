@@ -22,8 +22,11 @@ WATCHDOG_INTERVAL = timedelta(seconds=60)
 # Keypad limits from Clearlight's app documentation: max 175 °F, sessions up
 # to 60 minutes in 5-minute steps. The minimum setpoint isn't documented. The
 # controller stores whatever it is sent (verified), so these bounds are ours.
+# Sessions go to 90 minutes, past the keypad's 60, because the timer includes
+# the heat-up: 140 °F takes about 45 minutes from cold.
 MIN_TEMP_F = 70
 MAX_TEMP_F = 175
 SESSION_MIN_MINUTES = 5
-SESSION_MAX_MINUTES = 60
+SESSION_MAX_MINUTES = 90
 SESSION_STEP_MINUTES = 5
+

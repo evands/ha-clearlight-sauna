@@ -24,7 +24,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
   - byte2: RIGHT full-spectrum heater intensity, 0–100 %
   - byte3: LEFT full-spectrum heater intensity, 0–100 %
   - byte4: setpoint (°F)
-  - bytes 5–6: hours/minutes. Session length when off; **counts down once a minute while heating**.
+  - bytes 5–6: hours/minutes. Session length when off; **counts down once a minute while heating**. The keypad stores 60 min as 0 h 60 min. Since v0.3.2 the integration allows up to 90 min (the owner's call, 2026-10-13; the keypad stops at 60), written the same way as 0 h 90 min. **A countdown from above 60 hasn't been seen on hardware yet**; check the first 90-minute session counts down and stops at 0:00.
   - bytes 7–8: reservation fields (untested)
   - byte9: `SN` (unknown)
   - byte10: cabin temp (°F)
@@ -41,6 +41,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 
 ## Upgrade-heater option (v0.3.0)
 - **Options flow:** `upgrade_heater` (default off), handled by `OptionsFlowWithReload`.
+- **Initial setup (v0.3.2):** the config flow ends with a menu step `upgrade_heater` (`heater_activated` / `no_heater`) and writes the answer to `entry.options`, where the options flow reads it. It's a menu rather than a checkbox so there's no default to click past. The text tells owners with the heater installed but not activated to pick `heater_activated` too, so HA never exposes an AUX switch to a receptacle with a heater plugged in.
 - **When on:**
   - the AUX `switch` entity is removed from the registry, and nothing ever writes bit 5 (a test asserts this);
   - a read-only `binary_sensor` "Heater relay" (bit 5) is added;
@@ -59,4 +60,4 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 - **Hassfest:** clone `home-assistant/core` sparse (`script/` only), then run `python -m script.hassfest --integration-path custom_components/clearlight_sauna`.
 - **Pushing:** cloud sessions can't push to this repo (no GitHub App install). Pushes happen from the maintainer's Mac over **SSH**; the `gh` OAuth token there lacks `workflow` scope, so HTTPS pushes that touch `.github/workflows` are rejected.
 - **Commits and releases:** commits are authored `Evan D. Schoenberg, M.D. <evands@users.noreply.github.com>`. Releases are full GitHub releases (`vX.Y.Z`) matching `manifest.json` `version`, cut after CI passes. Don't rewrite published history; release tags back HACS installs.
-- **Later:** submit to the HACS default store (hacs/default, `integration` list) once the owner calls it stable. All checks already pass.
+- **Later:** submit to the HACS default store (hacs/default, `integration` list) once the owner calls it stable. All checks already pass. On 2026-10-13 the owner said it isn't stable yet; revisit around mid-December 2026. The entry goes between `Eunanibus/ha-emporia-ev` and `evantaur/seiverkot-consumption`; open the PR from a branch, not the fork's `master`, and fill in the PR template's release and CI-run links.

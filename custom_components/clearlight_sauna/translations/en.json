@@ -15,6 +15,14 @@
           "host": "IP address"
         }
       },
+      "upgrade_heater": {
+        "title": "Upgrade heater",
+        "description": "Has Clearlight's **Full Spectrum Upgrade Heater** been activated on this sauna? It plugs into the IEC receptacle by the door. Activation is a one-time keypad sequence: turn the sauna on, switch to °C, set 60 °C, then hold AUX for 5 seconds until it beeps.\n\nOnce activated, the AUX output runs the upgrade heater together with the sauna's own heaters. Toggling AUX over the network, from Home Assistant or the Clearlight app, silently takes the sauna out of heater mode and turns AUX back into a manual outlet with no timer.\n\n- **Upgrade heater activated:** Home Assistant never changes AUX. You get a read-only heater relay sensor, and a Repairs warning if heater mode is lost.\n- **No upgrade heater:** you get an AUX outlet switch.\n\nIf the heater is installed but not activated yet, choose **Upgrade heater activated** anyway so Home Assistant leaves AUX alone, and run the keypad sequence when you can. You can change this later under **Configure**.",
+        "menu_options": {
+          "heater_activated": "Upgrade heater activated",
+          "no_heater": "No upgrade heater"
+        }
+      },
       "reconfigure": {
         "title": "Change sauna address",
         "data": {
@@ -79,7 +87,7 @@
           "upgrade_heater": "Upgrade heater activated"
         },
         "data_description": {
-          "upgrade_heater": "Turn on if you've run the keypad sequence for Clearlight's Full Spectrum Upgrade Heater. The AUX switch is replaced by a read-only heater relay sensor, because toggling AUX over the network takes the sauna out of heater mode."
+          "upgrade_heater": "Turn on if you've run the keypad sequence for Clearlight's Full Spectrum Upgrade Heater, or if the heater is installed but not activated yet. The AUX switch is replaced by a read-only heater relay sensor, because toggling AUX over the network takes the sauna out of heater mode."
         }
       }
     }

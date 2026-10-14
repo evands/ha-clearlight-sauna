@@ -15,7 +15,7 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 | `light.clearlight_sauna_outside_light` | Exterior and mood lights |
 | `number.clearlight_sauna_left_full_spectrum_heater` | Left full-spectrum heater intensity, 0–100 % |
 | `number.clearlight_sauna_right_full_spectrum_heater` | Right full-spectrum heater intensity, 0–100 % |
-| `number.clearlight_sauna_session_time` | Session length (5–60 min) when off; time remaining while heating |
+| `number.clearlight_sauna_session_time` | Session length (5–90 min) when off; time remaining while heating |
 | `switch.clearlight_sauna_aux_outlet` | The keypad's AUX button (only when the upgrade-heater option is off) |
 | `binary_sensor.clearlight_sauna_heater_relay` | Read-only: heaters energized (only when the upgrade-heater option is on) |
 | `sensor.clearlight_sauna_cabin_temperature` | Cabin temperature, for history and automations |
@@ -32,7 +32,7 @@ This integration gives Home Assistant local control of Clearlight infrared sauna
 
 1. Click the button above, or in HACS go to **⋮ → Custom repositories**, add `https://github.com/evands/ha-clearlight-sauna`, and choose type **Integration**.
 2. Download **Clearlight Sauna** and restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration → Clearlight Sauna**. Saunas on your network are discovered automatically; if yours isn't found, enter its IP address.
+3. Go to **Settings → Devices & services → Add integration → Clearlight Sauna**. Saunas on your network are discovered automatically; if yours isn't found, enter its IP address. Setup then asks whether Clearlight's upgrade heater has been activated (see [AUX and the upgrade heater](#aux-and-the-upgrade-heater)).
 
 ### Manual
 
@@ -56,7 +56,7 @@ If you try a model that isn't listed, please [open an issue](https://github.com/
 
 ## Safety
 
-This integration can turn infrared heaters on when nobody is in the room, exactly as the official app's remote start can. Clearlight's warnings about towels or other items on or against the heaters apply to every remote start. The integration caps sessions at 60 minutes, the same limit as the keypad, and the sauna turns off when the session timer runs out.
+This integration can turn infrared heaters on when nobody is in the room, exactly as the official app's remote start can. Clearlight's warnings about towels or other items on or against the heaters apply to every remote start. The integration caps sessions at 90 minutes, and the sauna turns off when the session timer runs out. That's 30 minutes more than the keypad allows, because the timer includes the heat-up: from a cold cabin, 140 °F takes about 45 minutes, so a 60-minute session leaves only about 15 at temperature.
 
 Use automations that start the sauna with care, and consider a notification whenever heating starts.
 
@@ -69,7 +69,7 @@ What the AUX output does depends on whether Clearlight's **Full Spectrum Upgrade
 
 > ⚠️ **Toggling AUX over the network, including with the Clearlight app's AUX button, takes the sauna out of heater mode** and back to the timer-less behavior, until you re-run the keypad sequence.
 
-**If you've activated the upgrade heater, turn on the integration's option:** **Settings → Devices & services → Clearlight Sauna → Configure → Upgrade heater activated.** With it on:
+**If you've activated the upgrade heater, choose Upgrade heater activated when you set up the integration.** If it's installed but not activated yet, choose it anyway so Home Assistant leaves AUX alone. To change the answer later: **Settings → Devices & services → Clearlight Sauna → Configure → Upgrade heater activated.** With it on:
 
 - The AUX switch is removed, and the integration never writes AUX.
 - A read-only **Heater relay** sensor shows when the heaters are energized. The climate entity's `hvac_action` reports **heating** or **idle** from it, so you can see the thermostat cycling. Without the option, `hvac_action` only knows whether a session is running.
