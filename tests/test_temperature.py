@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from custom_components.clearlight_sauna.temperature import REVERSAL_HOLD, CabinTempFilter
+from custom_components.clearlight_sauna.temperature import REAL_JUMP, REVERSAL_HOLD, CabinTempFilter
 
 
 def _feed(f: CabinTempFilter, readings: list[tuple[float, int]]) -> list[int]:
@@ -80,12 +80,48 @@ def test_cool_down_tracks_after_trend_flips() -> None:
     assert shown == [140 - i for i in range(1, 30)]
 
 
-def test_big_jump_is_accepted_immediately_either_way() -> None:
+def test_two_degree_dip_while_heating_is_noise() -> None:
     f = CabinTempFilter()
     f.update(100, 0.0)
     f.set_trend(1)
-    assert f.update(98, 1.0) == 98  # 2 degrees against the trend: real
+    assert f.update(98, 1.0) == 100
+    assert f.update(101, 3.0) == 101
+
+
+def test_reading_far_from_shown_value_is_real() -> None:
+    f = CabinTempFilter()
+    f.update(100, 0.0)
+    f.set_trend(1)
+    assert f.update(100 - REAL_JUMP, 1.0) == 100 - REAL_JUMP
     assert f.direction == -1
+
+
+def test_heat_up_noise_from_real_run() -> None:
+    """Raw readings from the 2026-10-12 calibration run, 22:12:00-22:12:42 (s, °F)."""
+    f = CabinTempFilter()
+    f.update(122, -1.0)
+    f.set_trend(1)
+    raw = [(0.8, 123), (4.7, 122), (6.7, 123), (8.6, 124), (10.5, 123), (24.5, 122),
+           (26.5, 123), (42.0, 124), (63.8, 123), (73.5, 124), (81.3, 125), (85.1, 124),
+           (89.0, 123), (91.0, 124), (94.8, 125), (103.0, 124), (112.7, 125), (118.6, 126)]
+    shown = _feed(f, raw)
+    assert shown == sorted(shown)  # never steps back during the heat-up
+    assert shown[-1] == 126
+
+
+def test_noisy_reversal_is_accepted_after_hold() -> None:
+    """The cabin turns down while the trend says up; readings wander as it does."""
+    f = CabinTempFilter(hold=180)
+    f.update(128, 0.0)
+    f.set_trend(1)
+    readings = [(10.0 * i, v) for i, v in enumerate([127, 126, 127, 125, 126, 125, 124, 125, 126,
+                                                     125, 124, 125, 124, 124, 124, 125, 124, 124,
+                                                     124, 125], start=1)]
+    shown = _feed(f, readings)
+    assert shown[:18] == [128] * 18  # held until 180 s after the first low reading
+    assert shown[18] == 124  # then the latest reading, and the trend flips
+    assert f.direction == -1
+    assert shown[19] == 124  # rising is now the reversal: held
 
 
 def test_unknown_direction_accepts_first_step() -> None:
