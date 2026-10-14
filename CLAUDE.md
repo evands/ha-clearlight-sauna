@@ -5,6 +5,7 @@ A Home Assistant custom integration (HACS) for Clearlight infrared saunas that u
 ## Layout
 - `custom_components/clearlight_sauna/protocol.py`: LAN client with no HA imports; must stay Python 3.9-compatible so it can be bench-tested with macOS system Python.
 - `coordinator.py` is push-driven, with a 60 s watchdog poll. Entities live in `climate`, `light`, `number`, `sensor` and `switch`.
+- `heatup.py`: the heat-up model behind the planned time-to-target sensors (Phase 3 draft, no HA imports, not wired in yet). **Phase 3 continues from `tools/heatup/PHASE3.md`.** `tools/heatup/` also holds the calibration runs (`data/`), `fit.py`, and `evaluate_live.py`, which replays the runs through `heatup.py`.
 - `tests/fake_gagent.py`: a simulated controller. Frame layouts match real captures; the device identity in it is **synthetic**.
 - CI (`.github/workflows/validate.yml`) runs hassfest, the HACS action, and pytest on the latest HA (Python 3.14), on push and weekly.
 
