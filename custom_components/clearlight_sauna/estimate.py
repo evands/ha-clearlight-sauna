@@ -71,10 +71,6 @@ def _float(value: Any) -> float | None:
         return None
 
 
-def _minute_ceil(ts: float) -> datetime:
-    return dt_util.utc_from_timestamp(math.ceil(ts / 60) * 60)
-
-
 @dataclass
 class ReadyPlan:
     """A pending ready-by request. Times are timestamps; the target is °F."""
@@ -145,6 +141,9 @@ class HeatUpEstimator:
         # The last schedule_ready request, offered as defaults the next time.
         self.last_request: tuple[str, int, int] | None = None
         self.session: h.HeatUp | None = None
+        # Ready at is steadied: the raw estimate saws by a minute or two.
+        self._ready = h.SteadyReadyTime()
+        self._ready_key: tuple[float, bool] | None = None  # (target, approximate)
         self.output = Estimate()
         self._heating: bool | None = None
         self._ticker: CALLBACK_TYPE | None = None
@@ -222,6 +221,7 @@ class HeatUpEstimator:
         return self._recompute(state, now)
 
     def _session_started(self, state: SaunaState, now: float, resumed: bool) -> None:
+        self._ready.reset()
         start_temp = float(state.current_temp)
         idle = None if self.idle_since is None else now - self.idle_since
         cold = (
@@ -240,6 +240,7 @@ class HeatUpEstimator:
         )
 
     def _session_stopped(self, now: float) -> None:
+        self._ready.reset()
         session, self.session = self.session, None
         self.idle_since = now
         if session is not None and (result := session.calibration_result()) is not None:
@@ -338,13 +339,22 @@ class HeatUpEstimator:
         ceiling: float | None = None
         if state.heating and self.session is not None:
             eta, approximate, ceiling = self._session_eta(state, now)
+            # A new target, or the live fit taking over, moves the estimate for
+            # a reason: start the steadying over rather than lag behind it.
+            key = (float(state.set_temp), approximate)
+            if key != self._ready_key:
+                self._ready.reset()
+                self._ready_key = key
             if eta is not None:
-                minutes = math.ceil(eta / 60)
                 reached = self.session.reached_at
                 if eta == 0 and reached is not None:
+                    minutes = 0
                     ready_at = dt_util.utc_from_timestamp(math.floor(reached))
                 else:
-                    ready_at = _minute_ceil(now + eta)
+                    shown = self._ready.update(now, now + eta)
+                    ready_at = dt_util.utc_from_timestamp(shown)
+                    # Count down to the steadied time, so the two always agree.
+                    minutes = max(1, math.ceil((shown - now) / 60))
         elif not state.heating:
             if (room := self._room_for_planning(state)) is not None:
                 ceiling = room + self.calibration.delta_t

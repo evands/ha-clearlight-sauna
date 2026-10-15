@@ -16,7 +16,7 @@ Design and handoff, written 2026-10-13 at the end of a cloud session. **Built th
 |---|---|
 | `custom_components/clearlight_sauna/heatup.py` | The model, no HA imports: `eta_seconds`, `fit_ceiling` (τ fixed, optional prior), `fit_tau_and_ceiling` (joint, only when identified), `HeatUp` (one session: samples, live ceiling, "~" flag, calibration result), `Calibration` (stored values, blending, dict round-trip), `live_prior_samples`. |
 | `tests/test_heatup.py` | 10 tests, including a replay of `data/2026-10-13-175.csv`. |
-| `tools/heatup/evaluate_live.py` | Replays the recorded runs through `heatup.py` and scores the ETAs. Every number below comes from `python3 evaluate_live.py data/*.csv`. |
+| `tools/heatup/evaluate_live.py` | Replays the recorded runs through `heatup.py` and scores the ETAs. Every number below comes from `python3 evaluate_live.py` over the three runs recorded by 2026-10-13 (`data/` now also holds the filtered 2026-10-14 run, so `data/*.csv` gives different tables). |
 | `tools/heatup/README.md` | The three calibration runs and the model fits. |
 
 ## The model
@@ -110,7 +110,7 @@ The open questions are settled: the automation doesn't set the session (the acti
 Still to do:
 
 - ~~Hardware checks~~ **done 2026-10-14** (ready by 08:42, 140 °F, 30 min; room 75 °F, default model, not a cold start because of a 5 s on/off at 06:35). It started at 07:56 with a 76-minute session; the countdown passed 61 → 60 → 59 normally. The cabin reached 140 °F at 08:39:28, 43.4 min in, against the 46 min planned, so 2.5 min early and 32 min at temperature. At 0:00 (09:11:51) the power flag was cleared within a second, the controller reset to 76, and 60 was written back by 09:11:54. The upgrade heater's relay cycled with the thermostat throughout.
-- **Ready at jitters:** near the target it flipped between neighbouring minutes about 25 times in 15 minutes (08:39 ↔ 08:42). A minute or two of hysteresis would quiet it; not done yet.
+- ~~Ready at jitters~~ **steadied in v0.4.2** (`heatup.SteadyReadyTime`): the shown time is the median of the last 3 minutes of estimates and moves only when that median shifts by more than a minute; a shown time that passes before the target is reached is replaced at once. Time to target counts down to it, so the two agree. Replaying the four runs: direction reversals 25-46 -> 1-3 per heat-up, mean error over the last 15 min 0.9-1.2 min (was 1.0-1.5). Reset when the target changes or the live fit takes over (the 5-minute mark).
 - **Released:** v0.3.2 (filter fix, setup step, 90-minute cap), then Phase 3 as v0.4.0, both 2026-10-13.
 - ~~Dashboard~~ done in `ha-master-bath-dashboard` v1.2.0: "Heating · ready ~7:42", a ready-by sheet behind a clock button (defaults from `last_*`, lit while a plan is pending or `running`), and a heat button that's lit while heating.
 - Tests jump the clock with `freezer`; `tests/test_estimate.py` pushes the client heartbeat out of the way, since a ping in flight across a jump times out and drops the fake connection.

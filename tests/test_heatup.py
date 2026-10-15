@@ -141,3 +141,55 @@ def test_replay_of_recorded_run_calibrates_to_its_own_fit() -> None:
     # The stored model from a cold 77 °F cabin: 140 °F was reached at 43.2 min.
     eta = h.eta_seconds(start, 140, start + h.DEFAULT_DELTA_T, h.DEFAULT_TAU)
     assert eta / 60 == pytest.approx(43.2, abs=2)
+
+
+def test_steady_ready_time_ignores_the_sawtooth() -> None:
+    # The raw estimate alternating across a minute boundary every 30 s for 10 min:
+    # rounded up on its own it flips between 40:00 and 41:00 the whole time.
+    raw = [(t, 2380 if (t // 30) % 2 else 2440) for t in range(0, 600, 15)]
+    assert {math.ceil(r / 60) * 60 for _, r in raw} == {2400, 2460}
+    steady = h.SteadyReadyTime()
+    assert len({steady.update(t, r) for t, r in raw}) == 1  # one minute, never moved
+
+
+def test_steady_ready_time_follows_a_real_shift() -> None:
+    steady = h.SteadyReadyTime()
+    for t in range(0, 300, 15):
+        steady.update(t, 2400)
+    assert steady.shown == 2400
+    for t in range(300, 600, 15):  # the estimate moves 3 minutes later and stays there
+        steady.update(t, 2580)
+    assert steady.shown == 2580
+
+
+def test_steady_ready_time_never_shows_a_time_already_past() -> None:
+    steady = h.SteadyReadyTime()
+    for t in range(0, 180, 15):
+        steady.update(t, 300)  # ready at 5:00
+    # 5:00 comes and the cabin isn't there; the estimate slips 30 s at a time.
+    steady.update(300, 330)
+    assert steady.shown > 300
+
+
+def test_replay_of_2026_10_14_run_keeps_ready_at_steady() -> None:
+    """The run where the raw Ready at reversed direction 25 times before 140 °F."""
+    _, samples = _replay("2026-10-14-ready.csv")
+    hu = h.HeatUp(start=0.0, start_temp=samples[0][1], room=75, calibration=h.Calibration(), cold=False)
+    steady = h.SteadyReadyTime()
+    shown, approx_prev = [], None
+    for t, temp in samples:
+        hu.add(t, temp, target=140)
+        if temp >= 140:
+            break
+        ceiling, approx = hu.ceiling()
+        if approx != approx_prev:
+            steady.reset()  # as the estimator does when the live fit takes over
+            approx_prev = approx
+        eta = h.eta_seconds(temp, 140, ceiling, hu.tau)
+        if eta is not None:
+            shown.append(steady.update(t, t + eta))
+    steps = [b - a for a, b in zip(shown, shown[1:]) if b != a]
+    reversals = sum(1 for a, b in zip(steps, steps[1:]) if (a > 0) != (b > 0))
+    assert reversals <= 3
+    # It got to 140 °F at 43.4 min; the last shown time was within 2 min of that.
+    assert abs(shown[-1] - 43.4 * 60) <= 120

@@ -57,6 +57,19 @@ MIN_WEIGHT = 0.2
 UNREACHABLE_MARGIN = 2.0  # a target within this of the ceiling is treated as out of reach
 HOLD_MARGIN = 3.0  # once reached, readings this far below the target still count as there
 
+# The ready time shown is the median of the last READY_WINDOW of estimates, and
+# only moves when that median has moved READY_STEP or more. Recomputed every
+# 15 s from a whole-degree reading, the raw estimate saws back and forth by a
+# minute or two (about 25 changes in the last 15 minutes on 2026-10-14).
+# Replaying the four recorded runs to 140 °F: direction reversals 25-46 -> 1-3
+# per heat-up, changes 41-68 -> 9-20, and the mean error over the last 15
+# minutes lower on every run (0.9-1.2 min against 1.0-1.5); the worst moment is
+# 1.5 min on three runs, 3.5 on the odd 2026-10-12 one (2.5 unsteadied). A
+# 5-minute window / 2-minute step lagged that run by up to 4.5 min.
+READY_WINDOW = 180.0
+READY_STEP = 60.0
+READY_SPACING = 10.0  # estimates closer together than this replace the previous one
+
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -209,6 +222,47 @@ def fit_tau_and_ceiling(
     if low is None or high is None or low < 1.5 * floor or high < 1.5 * floor:
         return None
     return tau, ceiling
+
+
+class SteadyReadyTime:
+    """Ready-time estimates (timestamps) steadied for display.
+
+    The median over the window takes out the sawtooth between whole-degree
+    steps; the step keeps the shown minute from moving for small drifts. A shown
+    time that has passed is always replaced, so it never claims the cabin is
+    ready when it isn't. Reset it when the estimate jumps for a known reason
+    (new target, the live fit taking over), so the window doesn't lag behind.
+    """
+
+    def __init__(
+        self, window: float = READY_WINDOW, step: float = READY_STEP, spacing: float = READY_SPACING
+    ) -> None:
+        self._window, self._step, self._spacing = window, step, spacing
+        self._recent: list[tuple[float, float]] = []
+        self._basis: float | None = None  # the median the shown time was taken from
+        self.shown: float | None = None
+
+    def reset(self) -> None:
+        self._recent.clear()
+        self._basis = self.shown = None
+
+    def update(self, now: float, ready: float) -> float:
+        """Add the estimate made at `now`; return the ready time to show, on the minute."""
+        if self.shown is not None and self.shown <= now:
+            # The shown time came and went: the older estimates were too early.
+            self._recent.clear()
+        if self._recent and now - self._recent[-1][0] < self._spacing:
+            self._recent[-1] = (now, ready)
+        else:
+            self._recent.append((now, ready))
+        cutoff = now - self._window
+        self._recent = [p for p in self._recent if p[0] >= cutoff]
+        mid = median(r for _, r in self._recent)
+        # Compare medians, not the rounded minute, or rounding adds up to 60 s of slack.
+        if self.shown is None or self.shown <= now or abs(mid - self._basis) > self._step:
+            self._basis = mid
+            self.shown = math.ceil(mid / 60) * 60
+        return self.shown
 
 
 @dataclass
