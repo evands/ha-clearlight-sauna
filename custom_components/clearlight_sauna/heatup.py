@@ -46,6 +46,14 @@ LIVE_FIT_AFTER = 300.0  # seconds of heat-up before the live fit is shown withou
 COLD_MARGIN = 5.0  # a start within this of room temperature counts as cold
 MIN_CAL_SECONDS = 600.0  # a session needs this much heat-up data...
 MIN_CAL_RISE = 15.0  # ...and this much rise before it can calibrate anything
+# tau is refitted only from a heat-up at least this many tau long. The fit window
+# ends at the target, and a window that stops at 140 °F (43-45 min, about
+# 1.4 tau) can't tell tau from the faster first minutes: all four such runs fit
+# tau 25.5-29 min and a rise of 75-79 °F, against 31.5 and 84.5 from the
+# 60-minute run, and calibrating from one (2026-10-15) made the stored model
+# 2-5 min pessimistic on the others. With tau held fixed the same runs give a
+# rise of 83-87 °F. See tools/heatup/PHASE3.md.
+JOINT_FIT_TAUS = 2.0
 # The stored values count as this many sessions when blending in a new one: the
 # first session counts as much as the defaults. 0 let one odd run (2026-10-12)
 # wreck the calibration; 2 learned another model's sauna too slowly. The weight
@@ -327,7 +335,7 @@ class HeatUp:
         rise = max(temp for _, temp in points) - self.start_temp
         if self.elapsed < MIN_CAL_SECONDS or rise < MIN_CAL_RISE:
             return None
-        if self.elapsed >= self.tau:
+        if self.elapsed >= JOINT_FIT_TAUS * self.tau:
             pair = fit_tau_and_ceiling(points, self.start_temp)
             if pair is not None:
                 tau, ceiling = pair

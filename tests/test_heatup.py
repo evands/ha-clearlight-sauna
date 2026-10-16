@@ -135,9 +135,13 @@ def test_replay_of_recorded_run_calibrates_to_its_own_fit() -> None:
     hu = h.HeatUp(start=0.0, start_temp=start, room=start, calibration=h.Calibration(), cold=True)
     for t, temp in samples:
         hu.add(t, temp, target=175)
+    # 59.5 min of heat-up is under 2 tau, so tau stays fixed and only the rise is fitted.
     delta_t, tau = hu.calibration_result()
-    assert delta_t == pytest.approx(84.5, abs=2)
-    assert tau == pytest.approx(31.5 * 60, abs=120)
+    assert tau is None
+    assert delta_t == pytest.approx(85, abs=2)
+    # Fitted jointly, the same run gives the defaults' tau (they came from it).
+    pair = h.fit_tau_and_ceiling(h.smooth(hu.samples), start)
+    assert pair[0] == pytest.approx(31.5 * 60, abs=120)
     # The stored model from a cold 77 °F cabin: 140 °F was reached at 43.2 min.
     eta = h.eta_seconds(start, 140, start + h.DEFAULT_DELTA_T, h.DEFAULT_TAU)
     assert eta / 60 == pytest.approx(43.2, abs=2)
@@ -193,3 +197,17 @@ def test_replay_of_2026_10_14_run_keeps_ready_at_steady() -> None:
     assert reversals <= 3
     # It got to 140 °F at 43.4 min; the last shown time was within 2 min of that.
     assert abs(shown[-1] - 43.4 * 60) <= 120
+
+
+@pytest.mark.parametrize("name, room", [
+    ("2026-10-13-140.csv", 76), ("2026-10-14-ready.csv", 75), ("2026-10-15-cold.csv", 78),
+])
+def test_sessions_that_stop_at_140_learn_only_the_rise(name: str, room: float) -> None:
+    """A fit window ending at 140 °F once taught tau ~27 min and a rise ~77 °F (2026-10-15)."""
+    start, samples = _replay(name)
+    hu = h.HeatUp(start=0.0, start_temp=start, room=room, calibration=h.Calibration(), cold=True)
+    for t, temp in samples:
+        hu.add(t, temp, target=140)
+    delta_t, tau = hu.calibration_result()
+    assert tau is None
+    assert 82 <= delta_t <= 88
