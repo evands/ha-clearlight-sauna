@@ -58,6 +58,11 @@ MIN_SLOPE = 0.1 / 60  # °F per second
 # A started ready session that hasn't been seen heating after this long never
 # got going; put the session length back anyway.
 START_CONFIRM = 120.0
+# Writing the session length back is read back and retried if the controller
+# didn't keep it (it ignored the write 5 s after a keypad power-off on
+# 2026-10-19), waiting 15 s, 30 s, ... 4 min between tries: about 8 min in all.
+RESTORE_RETRY = 15.0
+RESTORE_ATTEMPTS = 6
 
 
 def storage_key(entry_id: str) -> str:
@@ -152,6 +157,8 @@ class HeatUpEstimator:
         # already have ended while Home Assistant was down.
         self._restore_armed = True
         self._started_at = 0.0
+        self._restore_failures = 0
+        self._restore_retry_at = 0.0
 
     @staticmethod
     def _now() -> float:
@@ -214,7 +221,17 @@ class HeatUpEstimator:
                 self._save()
             self._heating = state.heating
         if state.heating and self.session is not None:
-            self.session.add(now, state.current_temp, state.set_temp)
+            session = self.session
+            was_open = session.interrupted_at is None
+            session.add(now, state.current_temp, state.set_temp)
+            if was_open and session.interrupted_at is not None:
+                _LOGGER.info(
+                    "%s: cabin fell %.0f °F or more while heating (door opened?); "
+                    "heat-up data kept up to %.1f min",
+                    self._coordinator.config_entry.title,
+                    h.DOOR_DROP,
+                    session.elapsed / 60,
+                )
         self._track_room(state, now)
         self._check_plan(state, now)
         self._update_ticker(state)
@@ -438,6 +455,9 @@ class HeatUpEstimator:
         if self.restore_minutes is not None:
             if state.heating:
                 self._restore_armed = True
+                self._restore_failures, self._restore_retry_at = 0, 0.0
+            elif now < self._restore_retry_at:
+                pass  # waiting to try again
             elif self._restore_armed or now - self._started_at > START_CONFIRM:
                 # The ready session is over (or never got going).
                 self._busy = True
@@ -486,7 +506,11 @@ class HeatUpEstimator:
             self._busy = False
         if self.plan is plan:
             self.plan = None
-        self.restore_minutes = max(restore, SESSION_MIN_MINUTES)
+        if self.restore_minutes is None:
+            self.restore_minutes = max(restore, SESSION_MIN_MINUTES)
+        # else a restore from the last ready session was still being retried:
+        # the length read just now was that session's, so keep the older one.
+        self._restore_failures, self._restore_retry_at = 0, 0.0
         # Restore only after the session has been seen running: the state in
         # hand may predate the power-on.
         self._restore_armed = False
@@ -495,13 +519,32 @@ class HeatUpEstimator:
         self._refresh()
 
     async def _async_finish(self, minutes: int) -> None:
+        title = self._coordinator.config_entry.title
         try:
             await self._coordinator.async_restore_session_length(minutes)
         except HomeAssistantError as err:
-            _LOGGER.warning("Could not restore the session length, will retry: %s", err)
-            return
+            self._restore_failures += 1
+            if self._restore_failures < RESTORE_ATTEMPTS:
+                delay = RESTORE_RETRY * 2 ** (self._restore_failures - 1)
+                self._restore_retry_at = self._now() + delay
+                _LOGGER.info(
+                    "%s: could not restore the session length to %d min, trying again in %.0f s: %s",
+                    title, minutes, delay, err,
+                )
+                return
+            _LOGGER.warning(
+                "%s: gave up restoring the session length to %d min after %d tries: %s",
+                title, minutes, self._restore_failures, err,
+            )
+        else:
+            if self._restore_failures:
+                _LOGGER.info(
+                    "%s: session length restored to %d min on try %d",
+                    title, minutes, self._restore_failures + 1,
+                )
         finally:
             self._busy = False
+        self._restore_failures, self._restore_retry_at = 0, 0.0
         self.restore_minutes = None
         self._save()
         self._refresh()
@@ -539,5 +582,6 @@ class HeatUpEstimator:
                 "samples": len(s.samples),
                 "elapsed": s.elapsed,
                 "reached_at": s.reached_at,
+                "interrupted_at": s.interrupted_at,
             },
         }

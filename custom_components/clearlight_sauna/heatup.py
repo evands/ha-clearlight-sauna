@@ -19,8 +19,6 @@ the stored values were wrong, as for another model on day one, but doubled it
 when they were right: the first ~10 minutes heat faster than one exponential
 allows, so early data overstates the ceiling. See tools/heatup/PHASE3.md.
 
-Draft for Phase 3: not wired into the integration yet.
-
 Temperatures are °F (what the controller reports); times are seconds.
 """
 
@@ -61,6 +59,14 @@ JOINT_FIT_TAUS = 2.0
 # (seasons, a new heater).
 PRIOR_SESSIONS = 1
 MIN_WEIGHT = 0.2
+
+# A smoothed fall this big while the heaters run means the door opened (or the
+# cabin otherwise lost heat it won't get back on the curve): the fit window
+# closes and keeps only the heat-up before it. On 2026-10-19 the owner went in
+# at 138 °F and the reading fell 7 °F in two minutes; left in, those minutes
+# pulled the session's rise from 90 to 87 °F. The smoothing (3 of the last 5
+# samples) ignores the 1-3 °F dips the reading shows for seconds at a time.
+DOOR_DROP = 5.0
 
 UNREACHABLE_MARGIN = 2.0  # a target within this of the ceiling is treated as out of reach
 HOLD_MARGIN = 3.0  # once reached, readings this far below the target still count as there
@@ -275,7 +281,8 @@ class SteadyReadyTime:
 
 @dataclass
 class HeatUp:
-    """One heat-up, from the heaters coming on until the target is first reached.
+    """One heat-up, from the heaters coming on until the target is first reached
+    or the door opens.
 
     `room` is the room temperature the stored ceiling is measured from. `cold`
     marks a start from a cabin at room temperature: only those calibrate.
@@ -288,6 +295,8 @@ class HeatUp:
     cold: bool
     samples: list[tuple[float, float]] = field(default_factory=list)
     reached_at: float | None = None
+    interrupted_at: float | None = None  # the door opened: samples stop before it
+    _peak: float | None = field(default=None, repr=False)  # highest smoothed reading
 
     @property
     def tau(self) -> float:
@@ -301,9 +310,19 @@ class HeatUp:
     def elapsed(self) -> float:
         return self.samples[-1][0] if self.samples else 0.0
 
+    @property
+    def closed(self) -> bool:
+        """The fit window has closed: the target was reached or the door opened."""
+        return self.reached_at is not None or self.interrupted_at is not None
+
     def add(self, now: float, temp: float, target: float) -> None:
-        """Record a reading; the fit window closes when the target is first reached."""
-        if self.reached_at is not None:
+        """Record a reading.
+
+        The fit window closes when the target is first reached, or when the
+        reading falls DOOR_DROP below its peak (the door opened). In that case
+        the samples are cut back to the peak, so the fall never reaches the fit.
+        """
+        if self.closed:
             return
         t = now - self.start
         if self.samples and t - self.samples[-1][0] < SAMPLE_INTERVAL * 0.9:
@@ -311,6 +330,18 @@ class HeatUp:
         self.samples.append((t, float(temp)))
         if temp >= target:
             self.reached_at = now
+            return
+        if len(self.samples) < SMOOTH_SAMPLES:
+            return
+        level = median(temp for _, temp in self.samples[-SMOOTH_SAMPLES:])
+        if self._peak is None or level > self._peak:
+            self._peak = level
+        elif level <= self._peak - DOOR_DROP:
+            self.interrupted_at = now
+            points = smooth(self.samples)
+            top = max(temp for _, temp in points)
+            last = max(i for i, (_, temp) in enumerate(points) if temp == top)
+            del self.samples[last + 1 :]
 
     def ceiling(self) -> tuple[float, bool]:
         """Current best ceiling, and whether it is still only the stored model ("~")."""

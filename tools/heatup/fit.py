@@ -14,7 +14,8 @@ warm up. ETA from a reading T to a target Ts is tau * ln((T_inf - T) / (T_inf - 
 The raw reading is whole degrees and noisy (it flickers 1-3 F for seconds at
 a time), so it is resampled to 5 s steps and smoothed with a 61 s rolling
 median before fitting. The fit stops at the heat-up's peak, or earlier at the
-first heater-relay off, because after that the heaters are no longer simply on.
+first heater-relay off, because after that the heaters are no longer simply on,
+or at a `note` row whose text starts "door opened" (someone went in).
 
 Standard library only; Python 3.9+.
 """
@@ -38,6 +39,7 @@ def load(path: str) -> dict:
     cabin: list[tuple[float, float]] = []
     relay: list[tuple[float, bool]] = []
     climate: list[tuple[float, str, str, str]] = []
+    notes: list[tuple[float, str]] = []
     t0: datetime | None = None
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
@@ -55,16 +57,21 @@ def load(path: str) -> dict:
             elif ent == CLIMATE:
                 mode, action, target = (state.split("|") + ["", ""])[:3]
                 climate.append((t, mode, action, target))
-    return {"path": path, "start": t0, "cabin": cabin, "relay": relay, "climate": climate}
+            elif ent == "note":
+                notes.append((t, state))
+    return {"path": path, "start": t0, "cabin": cabin, "relay": relay, "climate": climate,
+            "notes": notes}
 
 
 def heat_window(s: dict) -> tuple[float, float]:
-    """From the relay (or climate) turning on to the first relay off, if any."""
+    """From the relay (or climate) turning on to the first relay off or door opening."""
     on = next((t for t, v in s["relay"] if v), None)
     if on is None:
         on = next(t for t, mode, *_ in s["climate"] if mode == "heat")
     off = next((t for t, v in s["relay"] if not v and t > on), math.inf)
-    return on, off
+    door = next((t for t, text in s.get("notes", []) if t > on and text.startswith("door opened")),
+                math.inf)
+    return on, min(off, door)
 
 
 def resample(points: list[tuple[float, float]], t_from: float, t_to: float) -> list[tuple[float, float]]:
@@ -146,7 +153,7 @@ def main(paths: list[str]) -> int:
         print(f"\n{path}")
         print(f"  start {s['start']:%Y-%m-%d %H:%M}, ambient {m['ambient']:.0f} F")
         print(f"  peak {m['peak'][1]:.0f} F at {m['peak'][0] / 60:.1f} min"
-              + ("" if math.isinf(m["off"]) else f", first relay off at {(m['off'] - m['on']) / 60:.1f} min"))
+              + ("" if math.isinf(m["off"]) else f", window ends (relay off or door) at {(m['off'] - m['on']) / 60:.1f} min"))
         print(f"  tau {m['tau'] / 60:.1f} min, T_inf {m['t_inf']:.0f} F (dT {m['delta_t']:.0f} F above ambient),"
               f" dead time {m['td']:.0f} s, RMSE {m['rmse']:.2f} F")
         lo, hi = m["t_inf_range"]

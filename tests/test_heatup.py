@@ -72,6 +72,30 @@ def test_window_closes_when_target_reached() -> None:
     assert hu.samples[-1][1] >= 120 > hu.samples[-2][1]
 
 
+def test_window_closes_when_the_door_opens() -> None:
+    """A sustained fall closes the window; the fall itself never reaches the fit."""
+    clean = _curve(tau=1920, ceiling=161, start=76, minutes=30)
+    door = [(t, temp - 7) for t, temp in _curve(tau=1920, ceiling=161, start=76, minutes=34)[121:]]
+    hu = h.HeatUp(start=0.0, start_temp=76, room=76, calibration=h.Calibration(), cold=True)
+    for t, temp in clean + door:
+        hu.add(t, temp, target=140)
+    assert hu.closed and hu.reached_at is None
+    assert hu.interrupted_at == pytest.approx(30 * 60 + 45, abs=15)  # 3 of 5 samples down
+    assert hu.samples == clean[: len(hu.samples)] and len(hu.samples) >= len(clean) - 1
+    delta_t, tau = hu.calibration_result()
+    assert tau is None and delta_t == pytest.approx(85, abs=0.5)
+    hu.add(40 * 60, 139, target=140)  # the cabin recovering adds nothing
+    assert hu.samples[-1][0] <= 30 * 60
+
+
+def test_short_dips_do_not_close_the_window() -> None:
+    """The reading dips 1-3 °F for seconds at a time; even two 6 °F samples in a row pass."""
+    hu = h.HeatUp(start=0.0, start_temp=76, room=76, calibration=h.Calibration(), cold=True)
+    for i, (t, temp) in enumerate(_curve(tau=1920, ceiling=161, start=76, minutes=40)):
+        hu.add(t, temp - (6 if i % 20 in (0, 1) else 0), target=140)
+    assert not hu.closed
+
+
 def test_only_cold_long_sessions_calibrate() -> None:
     warm = h.HeatUp(start=0.0, start_temp=110, room=76, calibration=h.Calibration(), cold=False)
     short = h.HeatUp(start=0.0, start_temp=76, room=76, calibration=h.Calibration(), cold=True)
@@ -211,3 +235,21 @@ def test_sessions_that_stop_at_140_learn_only_the_rise(name: str, room: float) -
     delta_t, tau = hu.calibration_result()
     assert tau is None
     assert 82 <= delta_t <= 88
+
+
+def test_replay_of_2026_10_19_run_drops_the_door_opening() -> None:
+    """Owner went in at 138 °F (05:46); the reading fell to 131 °F, then recovered."""
+    start, samples = _replay("2026-10-19-ready.csv")
+    assert start == 70
+    hu = h.HeatUp(start=0.0, start_temp=start, room=70, calibration=h.Calibration(), cold=True)
+    for t, temp in samples:
+        hu.add(t, temp, target=140)
+    assert hu.reached_at is None and hu.interrupted_at is not None
+    # Heaters on at 05:04:15; the window keeps the heat-up to 138 °F, before 05:46.
+    assert 41 * 60 <= hu.elapsed <= 42.5 * 60
+    delta_t, tau = hu.calibration_result()
+    assert tau is None
+    assert delta_t == pytest.approx(90, abs=1)
+    # Left in, the fall and recovery pulled it down to about 87 °F.
+    unguarded = h.fit_ceiling(h.smooth(samples), start, h.DEFAULT_TAU) - 70
+    assert unguarded == pytest.approx(87, abs=1)

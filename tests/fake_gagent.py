@@ -47,6 +47,9 @@ class FakeGAgent:
         self.server: asyncio.base_events.Server | None = None
         self.port = 0
         self.clients: list[asyncio.StreamWriter] = []
+        # Session-time writes to acknowledge but not keep, as the real controller
+        # did 5 s after a keypad power-off (2026-10-19).
+        self.ignore_minute_writes = 0
 
     async def start(self) -> None:
         self.server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
@@ -68,6 +71,9 @@ class FakeGAgent:
         assert p0[0] == p.P0_WRITE
         flags = int.from_bytes(p0[1:3], "big")
         vals = p0[3:13]
+        if flags >> p.DP_SET_MINUTE & 1 and self.ignore_minute_writes:
+            self.ignore_minute_writes -= 1
+            flags &= ~(1 << p.DP_SET_MINUTE | 1 << p.DP_SET_HOUR)
         for dp, bit in p.BOOL_BITS.items():
             if flags >> dp & 1:
                 mask = 1 << bit

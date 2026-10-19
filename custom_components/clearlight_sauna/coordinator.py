@@ -255,6 +255,11 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
 
         Never while heating. At 0:00 the power flag is still set (the heaters
         are already off); clear it first so the timer isn't written mid-session.
+
+        The length is read back. On 2026-10-19 the controller acknowledged the
+        write 5 s after a keypad power-off but kept its own value; the same
+        write minutes later held. Raises HomeAssistantError unless the
+        controller reports the length, so the caller can try again.
         """
         state = self.client.state
         if state is None or state.heating:
@@ -262,8 +267,20 @@ class ClearlightCoordinator(DataUpdateCoordinator[SaunaState]):
         if state.power:
             await self._async_power_off_confirmed()
         state = self.client.state
-        if state is not None and not state.power and state.session_minutes != minutes:
-            await self.async_write({DP_SET_HOUR: 0, DP_SET_MINUTE: minutes})
+        if state is None or state.power:
+            raise HomeAssistantError("The sauna did not turn off")
+        if state.session_minutes == minutes:
+            return
+        await self.async_write({DP_SET_HOUR: 0, DP_SET_MINUTE: minutes})
+        try:
+            state = await self.client.async_request_status(wait=True)
+        except (GizwitsError, TimeoutError) as err:
+            raise HomeAssistantError(f"Sauna did not report the session length: {err}") from err
+        if state is None or state.session_minutes != minutes:
+            raise HomeAssistantError(
+                f"Sauna kept a session length of "
+                f"{'unknown' if state is None else state.session_minutes} min, not {minutes}"
+            )
 
     async def async_write(self, changes: dict[int, int]) -> None:
         """Send a write; surface failures to the caller of the service."""
