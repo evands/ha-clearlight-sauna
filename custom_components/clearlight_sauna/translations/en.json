@@ -64,6 +64,9 @@
       "cabin_temperature": {
         "name": "Cabin temperature"
       },
+      "cabin_temperature_raw": {
+        "name": "Cabin temperature (raw)"
+      },
       "time_remaining": {
         "name": "Time remaining"
       },

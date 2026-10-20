@@ -31,12 +31,16 @@ from statistics import median
 CABIN = "sensor.clearlight_sauna_cabin_temperature"
 CLIMATE = "climate.clearlight_sauna"
 RELAY_SUFFIX = "_heater_relay"
+# From v0.4.7: every reading the controller reports, before the de-dither filter.
+# The integration calibrates from these, so runs that have them are fitted on them.
+RAW_SUFFIX = "_cabin_temperature_raw"
 STEP = 5.0  # s
 WINDOW = 61.0  # s, rolling median
 
 
 def load(path: str) -> dict:
     cabin: list[tuple[float, float]] = []
+    raw: list[tuple[float, float]] = []
     relay: list[tuple[float, bool]] = []
     climate: list[tuple[float, str, str, str]] = []
     notes: list[tuple[float, str]] = []
@@ -52,6 +56,8 @@ def load(path: str) -> dict:
                 continue
             if ent == CABIN:
                 cabin.append((t, float(state)))
+            elif ent.endswith(RAW_SUFFIX):
+                raw.append((t, float(state)))
             elif ent.endswith(RELAY_SUFFIX):
                 relay.append((t, state == "on"))
             elif ent == CLIMATE:
@@ -59,8 +65,8 @@ def load(path: str) -> dict:
                 climate.append((t, mode, action, target))
             elif ent == "note":
                 notes.append((t, state))
-    return {"path": path, "start": t0, "cabin": cabin, "relay": relay, "climate": climate,
-            "notes": notes}
+    return {"path": path, "start": t0, "cabin": raw or cabin, "source": "raw" if raw else "filtered",
+            "shown": cabin, "relay": relay, "climate": climate, "notes": notes}
 
 
 def heat_window(s: dict) -> tuple[float, float]:
@@ -151,7 +157,7 @@ def main(paths: list[str]) -> int:
         s = load(path)
         m = analyse(s)
         print(f"\n{path}")
-        print(f"  start {s['start']:%Y-%m-%d %H:%M}, ambient {m['ambient']:.0f} F")
+        print(f"  start {s['start']:%Y-%m-%d %H:%M}, ambient {m['ambient']:.0f} F ({s['source']} readings)")
         print(f"  peak {m['peak'][1]:.0f} F at {m['peak'][0] / 60:.1f} min"
               + ("" if math.isinf(m["off"]) else f", window ends (relay off or door) at {(m['off'] - m['on']) / 60:.1f} min"))
         print(f"  tau {m['tau'] / 60:.1f} min, T_inf {m['t_inf']:.0f} F (dT {m['delta_t']:.0f} F above ambient),"

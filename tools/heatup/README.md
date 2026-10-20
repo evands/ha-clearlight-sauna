@@ -34,7 +34,7 @@ HA_URL=http://homeassistant.local:8123 HA_TOKEN=<long-lived token> \
 python3 fit.py data/*.csv
 ```
 
-Both scripts use the standard library only (Python 3.9+). The export is long-form, one row per state change: the cabin temperature sensor, the heater relay, and the climate entity as `mode|hvac_action|target`. Add a row with entity `note` for anything the history can't show; a note whose text starts `door opened` ends the fit window there. Runs recorded before v0.3.2 hold the raw, flickering reading; from v0.3.2 the sensor is de-dithered. The fit handles both.
+Both scripts use the standard library only (Python 3.9+). The export is long-form, one row per state change: the cabin temperature sensor, the heater relay, and the climate entity as `mode|hvac_action|target`. Add a row with entity `note` for anything the history can't show; a note whose text starts `door opened` ends the fit window there. From v0.4.7, enable **Cabin temperature (raw)** before a run: the export then includes every reading the controller reported, and `fit.py`, `evaluate_live.py` and the tests fit on those (what the integration calibrates from) instead of the filtered sensor. Runs before 2026-10-20 have only the filtered sensor. Runs recorded before v0.3.2 hold the raw, flickering reading; from v0.3.2 the sensor is de-dithered. The fit handles both.
 
 `fit.py` resamples to 5 s, takes a 61 s rolling median (the raw reading flickers 1-3 °F for seconds at a time), fits the heat-up from the relay turning on to the first relay off or the peak, and reports `tau`, `T_inf`, how well `T_inf` is pinned down, and ETA checks against the run itself.
 

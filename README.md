@@ -21,6 +21,7 @@ Entity IDs below are for a sauna named Clearlight Sauna that isn't in an area. H
 | `switch.clearlight_sauna_aux_outlet` | The keypad's AUX button (only when the upgrade-heater option is off) |
 | `binary_sensor.clearlight_sauna_heater_relay` | Read-only: heaters energized (only when the upgrade-heater option is on) |
 | `sensor.clearlight_sauna_cabin_temperature` | Cabin temperature, for history and automations |
+| `sensor.clearlight_sauna_cabin_temperature_raw` | Every reading the controller reports, before the flicker filter (diagnostic, disabled by default; enable it to collect data) |
 | `sensor.clearlight_sauna_time_remaining` | Minutes left in the session; 0 when off |
 | `sensor.clearlight_sauna_time_to_target` | Minutes until the cabin reaches the setpoint; when off, how long a heat-up would take |
 | `sensor.clearlight_sauna_ready_at` | When the cabin is expected to reach the setpoint (or did) |

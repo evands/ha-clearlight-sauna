@@ -134,13 +134,16 @@ def _replay(name: str) -> tuple[float, list[tuple[float, float]]]:
     """(start temp, raw reading every 15 s from heaters on to the first relay off)."""
     rows = list(csv.DictReader((DATA / name).open()))
     t0 = datetime.fromisoformat(rows[0]["time"])
-    cabin, relay = [], []
+    cabin, raw, relay = [], [], []
     for row in rows:
         t = (datetime.fromisoformat(row["time"]) - t0).total_seconds()
         if row["entity_id"] == CABIN and row["state"].isdigit():
             cabin.append((t, float(row["state"])))
+        elif row["entity_id"].endswith("_cabin_temperature_raw") and row["state"].isdigit():
+            raw.append((t, float(row["state"])))
         elif row["entity_id"].endswith("_heater_relay"):
             relay.append((t, row["state"] == "on"))
+    cabin = raw or cabin  # the integration samples the raw reading
     on = next(t for t, v in relay if v)
     off = next(t for t, v in relay if not v and t > on)
     start = next(temp for t, temp in reversed(cabin) if t <= on)

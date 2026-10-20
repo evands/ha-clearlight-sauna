@@ -9,8 +9,9 @@ recorder's purge_keep_days), so export each calibration run within that.
 
 Times are local unless they carry an offset. The token is a long-lived access
 token (your HA profile -> Security). Output is long-form, one row per state
-change: ``time,entity_id,state``. Climate rows carry hvac_action and the
-target as ``state|hvac_action|target``.
+change: ``time,entity_id,state``. Rows cover the cabin temperature as shown,
+the raw reading (when that sensor is enabled), the heater relay and the
+climate entity; climate rows carry ``state|hvac_action|target``.
 
 Standard library only; Python 3.9+.
 """
@@ -29,6 +30,8 @@ CABIN = "sensor.clearlight_sauna_cabin_temperature"
 CLIMATE = "climate.clearlight_sauna"
 # The heater relay sensor exists when the integration's upgrade-heater option is on.
 RELAY = "binary_sensor.master_bathroom_clearlight_sauna_heater_relay"
+# The unfiltered reading (v0.4.7+, disabled by default; enable it to collect runs).
+RAW = "sensor.master_bathroom_clearlight_sauna_cabin_temperature_raw"
 
 
 def _iso(text: str) -> str:
@@ -56,7 +59,7 @@ def main(argv: list[str]) -> int:
     common = {"end_time": end, "significant_changes_only": "0"}
 
     rows: list[tuple[str, str, str]] = []
-    plain = _get(base, token, path, {**common, "filter_entity_id": f"{CABIN},{RELAY}",
+    plain = _get(base, token, path, {**common, "filter_entity_id": f"{CABIN},{RAW},{RELAY}",
                                      "minimal_response": "1", "no_attributes": "1"})
     for series in plain:
         entity = series[0]["entity_id"] if series else None

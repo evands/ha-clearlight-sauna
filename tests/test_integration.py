@@ -17,6 +17,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
@@ -33,6 +34,7 @@ INSIDE = "light.clearlight_sauna_inside_light"
 OUTSIDE = "light.clearlight_sauna_outside_light"
 SESSION = "number.clearlight_sauna_session_time"
 CABIN = "sensor.clearlight_sauna_cabin_temperature"
+CABIN_RAW = "sensor.clearlight_sauna_cabin_temperature_raw"
 REMAINING = "sensor.clearlight_sauna_time_remaining"
 AUX = "switch.clearlight_sauna_aux_outlet"
 LEFT = "number.clearlight_sauna_left_full_spectrum_heater"
@@ -307,3 +309,40 @@ async def test_cabin_temperature_dither_is_filtered(
     for raw in (77, 76, 77, 78, 77, 78, 79):
         await report(raw)
     assert cabin_changes == ["77", "78", "79"]
+
+
+async def test_raw_cabin_temperature_records_every_reading(
+    hass: HomeAssistant, patch_client, fake_device: FakeGAgent
+) -> None:
+    """Disabled by default; once enabled it shows what the filter holds back."""
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    entry = await _setup(hass)
+    registry = er.async_get(hass)
+    reg = registry.async_get(CABIN_RAW)
+    assert reg is not None and reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert hass.states.get(CABIN_RAW) is None
+
+    registry.async_update_entity(CABIN_RAW, disabled_by=None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(CABIN_RAW).state == "76"
+    assert hass.states.get(CABIN_RAW).attributes.get("state_class") is None  # no statistics
+
+    client = entry.runtime_data.client
+    raw_changes: list[str] = []
+
+    @callback
+    def _listen(event: Event) -> None:
+        if event.data["entity_id"] == CABIN_RAW:
+            raw_changes.append(event.data["new_state"].state)
+
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _listen)
+    for raw in (75, 76, 75):
+        fake_device.status[10] = raw
+        for _ in range(3):
+            await client.async_request_status(wait=True)
+            if client.state.current_temp == raw:
+                break
+        await hass.async_block_till_done()
+    assert raw_changes == ["75", "76", "75"]  # every reading, dither included
+    assert hass.states.get(CABIN).state == "75"  # the shown value took one step

@@ -1,4 +1,4 @@
-"""Cabin temperature, session time remaining, and the heat-up estimate."""
+"""Cabin temperature (shown and raw), session time remaining, and the heat-up estimate."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -29,6 +29,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             ClearlightCabinTemperature(coordinator, "cabin_temperature"),
+            ClearlightRawCabinTemperature(coordinator, "cabin_temperature_raw"),
             ClearlightTimeRemaining(coordinator, "time_remaining"),
             ClearlightTimeToTarget(coordinator, "time_to_target"),
             ClearlightReadyAt(coordinator, "ready_at"),
@@ -48,6 +49,25 @@ class ClearlightCabinTemperature(ClearlightEntity, SensorEntity):
         # De-dithered; the raw reading can flip between neighbours every few seconds.
         temp = self.coordinator.cabin_temp
         return self.state_data.current_temp if temp is None else temp
+
+
+class ClearlightRawCabinTemperature(ClearlightEntity, SensorEntity):
+    """The controller's own cabin reading, unfiltered: every value it reports.
+
+    For collecting data (dither, glitches, heat-up curves), so it is disabled
+    by default and has no state class: recorded history only, no long-term
+    statistics.
+    """
+
+    _attr_translation_key = "cabin_temperature_raw"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    @property
+    def native_value(self) -> int:
+        return self.state_data.current_temp
 
 
 class ClearlightTimeRemaining(ClearlightEntity, SensorEntity):
