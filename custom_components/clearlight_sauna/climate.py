@@ -16,7 +16,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.util.unit_conversion import TemperatureConverter
+from homeassistant.util.unit_conversion import TemperatureConverter, TemperatureDeltaConverter
 
 from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F
 from .coordinator import ClearlightConfigEntry
@@ -137,17 +137,10 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
         delta_t = None
         if rise is not None:
             unit = self.hass.config.units.temperature_unit
-            delta_t = TemperatureConverter.convert_interval(
-                rise, unit, UnitOfTemperature.FAHRENHEIT
-            )
+            delta_t = TemperatureDeltaConverter.convert(rise, unit, UnitOfTemperature.FAHRENHEIT)
             if not DELTA_T_RANGE[0] <= delta_t <= DELTA_T_RANGE[1]:
                 low, high = (
-                    round(
-                        TemperatureConverter.convert_interval(
-                            t, UnitOfTemperature.FAHRENHEIT, unit
-                        ),
-                        1,
-                    )
+                    round(TemperatureDeltaConverter.convert(t, UnitOfTemperature.FAHRENHEIT, unit), 1)
                     for t in DELTA_T_RANGE
                 )
                 raise ServiceValidationError(

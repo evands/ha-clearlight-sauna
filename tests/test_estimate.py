@@ -401,7 +401,7 @@ async def test_reset_button_restores_default_model(
 
 
 async def test_calibration_can_be_set_by_hand(
-    hass: HomeAssistant, patch_client, hass_storage, freezer
+    hass: HomeAssistant, patch_client, hass_storage, freezer, caplog
 ) -> None:
     """For correcting a session that calibrated from bad data (2026-10-19's door opening)."""
     _cold_room(
@@ -434,6 +434,7 @@ async def test_calibration_can_be_set_by_hand(
     with pytest.raises(vol.Invalid):
         await _call(hass, "set_heatup_calibration", time_constant=5)
     assert hass.states.get(TTT).attributes["delta_t_f"] == 90.0
+    assert "deprecated" not in caplog.text  # v0.4.5 used convert_interval (gone in 2026.12)
 
 
 async def test_schedule_takes_the_users_temperature_unit(
