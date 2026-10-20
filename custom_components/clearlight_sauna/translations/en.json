@@ -180,6 +180,20 @@
     "cancel_ready": {
       "name": "Cancel ready by",
       "description": "Drop a pending ready-by plan. A session already running isn't stopped."
+    },
+    "set_heatup_calibration": {
+      "name": "Set heat-up calibration",
+      "description": "Replace what the heat-up estimate has learned about this sauna, for example to correct a session that calibrated from bad data. Leave a field out to keep its current value. Later cold starts keep adjusting it.",
+      "fields": {
+        "rise": {
+          "name": "Rise",
+          "description": "How far above room temperature the cabin would level off with the heaters on, as a temperature difference in your Home Assistant unit (the Time to target sensor's delta_t_f attribute, in °F)."
+        },
+        "time_constant": {
+          "name": "Time constant",
+          "description": "How quickly the cabin approaches that level, in minutes (the time_constant_min attribute)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -188,6 +202,12 @@
     },
     "temperature_out_of_range": {
       "message": "The temperature must be between {min} and {max}."
+    },
+    "calibration_nothing_to_set": {
+      "message": "Give a rise, a time constant, or both."
+    },
+    "rise_out_of_range": {
+      "message": "The rise must be between {min} and {max}."
     }
   }
 }

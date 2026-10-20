@@ -18,13 +18,17 @@ from homeassistant.helpers.typing import ConfigType
 from .const import (
     ATTR_MINUTES_AT_TEMPERATURE,
     ATTR_READY_BY,
+    ATTR_RISE,
+    ATTR_TIME_CONSTANT,
     CONF_MAC,
     DOMAIN,
     READY_HOLD_MAX_MINUTES,
     READY_HOLD_MIN_MINUTES,
     SERVICE_CANCEL_READY,
     SERVICE_SCHEDULE_READY,
+    SERVICE_SET_HEATUP_CALIBRATION,
 )
+from .heatup import TAU_RANGE
 from .coordinator import ClearlightConfigEntry, ClearlightCoordinator
 from .estimate import STORAGE_VERSION, storage_key
 from .protocol import ClearlightClient, GizwitsError, async_discover
@@ -45,7 +49,7 @@ PLATFORMS = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the ready-by actions; they target the sauna's climate entity."""
+    """Register the actions; they target the sauna's climate entity."""
     service.async_register_platform_entity_service(
         hass,
         DOMAIN,
@@ -68,6 +72,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         entity_domain=CLIMATE_DOMAIN,
         schema=None,
         func="async_cancel_ready",
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_HEATUP_CALIBRATION,
+        entity_domain=CLIMATE_DOMAIN,
+        schema={
+            vol.Optional(ATTR_RISE): vol.Coerce(float),
+            vol.Optional(ATTR_TIME_CONSTANT): vol.All(
+                vol.Coerce(float),
+                vol.Range(min=TAU_RANGE[0] / 60, max=TAU_RANGE[1] / 60),
+            ),
+        },
+        func="async_set_heatup_calibration",
     )
     return True
 

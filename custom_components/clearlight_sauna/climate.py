@@ -21,6 +21,7 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F
 from .coordinator import ClearlightConfigEntry
 from .entity import ClearlightEntity
+from .heatup import DELTA_T_RANGE
 from .protocol import DP_SET_TEMP
 
 PARALLEL_UPDATES = 1
@@ -120,3 +121,39 @@ class ClearlightClimate(ClearlightEntity, ClimateEntity):
     async def async_cancel_ready(self) -> None:
         """The clearlight_sauna.cancel_ready action."""
         self.coordinator.estimator.async_cancel()
+
+    async def async_set_heatup_calibration(
+        self, rise: float | None = None, time_constant: float | None = None
+    ) -> None:
+        """The clearlight_sauna.set_heatup_calibration action.
+
+        `rise` is a temperature difference in HA's unit; `time_constant` is in
+        minutes. Either may be left out to keep its stored value.
+        """
+        if rise is None and time_constant is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="calibration_nothing_to_set"
+            )
+        delta_t = None
+        if rise is not None:
+            unit = self.hass.config.units.temperature_unit
+            delta_t = TemperatureConverter.convert_interval(
+                rise, unit, UnitOfTemperature.FAHRENHEIT
+            )
+            if not DELTA_T_RANGE[0] <= delta_t <= DELTA_T_RANGE[1]:
+                low, high = (
+                    round(
+                        TemperatureConverter.convert_interval(
+                            t, UnitOfTemperature.FAHRENHEIT, unit
+                        ),
+                        1,
+                    )
+                    for t in DELTA_T_RANGE
+                )
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="rise_out_of_range",
+                    translation_placeholders={"min": f"{low}{unit}", "max": f"{high}{unit}"},
+                )
+        tau = None if time_constant is None else time_constant * 60
+        self.coordinator.estimator.async_set_calibration(delta_t, tau)

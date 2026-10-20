@@ -563,6 +563,29 @@ class HeatUpEstimator:
         self._save()
         self._refresh()
 
+    @callback
+    def async_set_calibration(self, delta_t: float | None, tau: float | None) -> None:
+        """Replace the learned rise (°F) and/or time constant (s).
+
+        The session counts stay, so later sessions blend in at the same weight
+        as before.
+        """
+        old = self.calibration
+        self.calibration = h.Calibration(
+            tau=old.tau if tau is None else tau,
+            delta_t=old.delta_t if delta_t is None else delta_t,
+            sessions=old.sessions,
+            tau_sessions=old.tau_sessions,
+        )
+        _LOGGER.info(
+            "%s: heat-up calibration set by hand: %s -> %s",
+            self._coordinator.config_entry.title,
+            old.as_dict(),
+            self.calibration.as_dict(),
+        )
+        self._save()
+        self._refresh()
+
     def diagnostics(self) -> dict[str, Any]:
         s = self.session
         return {

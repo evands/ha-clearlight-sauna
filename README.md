@@ -102,6 +102,8 @@ With the heaters on, the cabin warms like a single mass heading for a ceiling so
 
 When the sauna is off, **Time to target** shows how long a session started now would take to reach the setpoint. It's unknown when the setpoint is above what the cabin levels off at. Press **Reset heat-up calibration** after a hardware change, such as adding the upgrade heater; the estimate then learns again over the next cold starts.
 
+To correct the learned values by hand, for example after a session that calibrated from bad data, use **Set heat-up calibration** (`clearlight_sauna.set_heatup_calibration`) on the climate entity. `rise` is how far above room temperature the cabin levels off, as a temperature difference in your Home Assistant unit; `time_constant` is in minutes. The current values are the `delta_t_f` and `time_constant_min` attributes of **Time to target**. Leave either field out to keep it. Later cold starts keep adjusting both.
+
 ### Ready by
 
 The **Schedule ready by** action (`clearlight_sauna.schedule_ready`) takes three values:

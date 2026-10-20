@@ -6,6 +6,7 @@ import math
 from datetime import timedelta
 
 import pytest
+import voluptuous as vol
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
@@ -397,6 +398,42 @@ async def test_reset_button_restores_default_model(
     assert attrs["calibration_sessions"] == 0
     assert attrs["delta_t_f"] == h.DEFAULT_DELTA_T
     assert attrs["time_constant_min"] == round(h.DEFAULT_TAU / 60, 1)
+
+
+async def test_calibration_can_be_set_by_hand(
+    hass: HomeAssistant, patch_client, hass_storage, freezer
+) -> None:
+    """For correcting a session that calibrated from bad data (2026-10-19's door opening)."""
+    _cold_room(
+        hass_storage,
+        calibration={"tau": 1920.0, "delta_t": 85.87, "sessions": 1, "tau_sessions": 0},
+    )
+    await _setup(hass)
+    await _call(hass, "set_heatup_calibration", rise=87.53)
+    attrs = hass.states.get(TTT).attributes
+    assert attrs["delta_t_f"] == 87.5
+    assert attrs["time_constant_min"] == 32.0  # left out, so kept
+    assert attrs["calibration_sessions"] == 1  # later sessions blend in as before
+    assert attrs["ceiling_f"] == round(76 + 87.53, 1)
+    await _advance(hass, freezer, 1)
+    stored = hass_storage[storage_key(ENTRY_ID)]["data"]["calibration"]
+    assert stored == {"tau": 1920.0, "delta_t": 87.53, "sessions": 1, "tau_sessions": 0}
+
+    await _call(hass, "set_heatup_calibration", time_constant=30)
+    assert hass.states.get(TTT).attributes["time_constant_min"] == 30.0
+    assert hass.states.get(TTT).attributes["delta_t_f"] == 87.5
+
+    hass.config.units = METRIC_SYSTEM  # the rise is a difference in the user's unit
+    await _call(hass, "set_heatup_calibration", rise=50)
+    assert hass.states.get(TTT).attributes["delta_t_f"] == 90.0
+
+    with pytest.raises(ServiceValidationError):
+        await _call(hass, "set_heatup_calibration")
+    with pytest.raises(ServiceValidationError):
+        await _call(hass, "set_heatup_calibration", rise=100)  # 180 °F
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "set_heatup_calibration", time_constant=5)
+    assert hass.states.get(TTT).attributes["delta_t_f"] == 90.0
 
 
 async def test_schedule_takes_the_users_temperature_unit(
